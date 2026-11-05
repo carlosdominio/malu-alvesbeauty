@@ -89,8 +89,8 @@ CREATE INDEX IF NOT EXISTS idx_clientes_telefone ON clientes (telefone);
 -- ==============================================================================
 
 -- Inserir Configuração Padrão se não existir
-INSERT INTO barbearia_config (nome_barbearia, telefone_whatsapp, tempo_buffer_minutos, antecedencia_minima_cancelamento_horas, chave_pix)
-VALUES ('Barbearia Imperial', '11999998888', 5, 2, 'pix@barbeariaimperial.com.br')
+INSERT INTO barbearia_config (nome_barbearia, telefone_whatsapp, tempo_buffer_minutos, antecedencia_minima_cancelamento_horas, chave_pix, mensagem_boas_vindas)
+VALUES ('malu.alvesbeauty', '82994247688', 5, 2, 'pix@malualvesbeauty.com.br', 'Bem-vindo ao malu.alvesbeauty! Agende seu horário com facilidade.')
 ON CONFLICT DO NOTHING;
 
 -- Inserir Expediente Padrão (Seg a Sáb: 09h às 19h com 1h de almoço | Dom: Fechado)
@@ -100,15 +100,14 @@ INSERT INTO expediente (dia_semana, hora_inicio, hora_fim, intervalo_inicio, int
 (2, '09:00:00', '19:00:00', '12:00:00', '13:00:00', true),  -- Terça
 (3, '09:00:00', '19:00:00', '12:00:00', '13:00:00', true),  -- Quarta
 (4, '09:00:00', '19:00:00', '12:00:00', '13:00:00', true),  -- Quinta
-(5, '09:00:00', '20:00:00', '12:00:00', '13:00:00', true),  -- Sexta (horário estendido)
-(6, '08:30:00', '18:00:00', '12:00:00', '13:00:00', true)   -- Sábado
+(5, '09:00:00', '19:00:00', '12:00:00', '13:00:00', true),  -- Sexta
+(6, '09:00:00', '18:00:00', '12:00:00', '13:00:00', true)   -- Sábado
 ON CONFLICT (dia_semana) DO NOTHING;
 
--- Inserir Serviços Principais
+-- Inserir Serviços Iniciais do Studio
 INSERT INTO servicos (titulo, descricao, preco, duracao_minutos, icone) VALUES
-('Corte Degradê / Social', 'Corte moderno com máquina e tesoura, finalizado com navalha e pomada premium.', 35.00, 30, 'scissors'),
-('Barba Terapia Completa', 'Alinhamento com toalha quente, massagem facial, navalha e óleo hidratante.', 25.00, 25, 'sparkles'),
-('Combo Corte + Barba', 'O pacote completo: corte de cabelo alinhado com barba terapia e finalização.', 50.00, 50, 'flame'),
-('Sobrancelha na Navalha', 'Alinhamento e acabamento perfeito da sobrancelha.', 15.00, 10, 'scissors'),
-('Pigmentação de Barba / Cabelo', 'Disfarce de falhas e realce dos contornos.', 20.00, 20, 'sparkles')
+('Design de Sobrancelhas Simples', 'Alinhamento com pinça, medição visagista e acabamento perfeito.', 30.00, 30, 'sparkles'),
+('Design com Henna', 'Design personalizado com aplicação de henna para realce e preenchimento.', 45.00, 45, 'sparkles'),
+('Brow Lamination', 'Alinhamento dos fios rebeldes das sobrancelhas deixando visual encorpado e moderno.', 80.00, 50, 'sparkles'),
+('Epilação Facial / Buço', 'Remoção delicada dos pelos com acabamento suave.', 20.00, 15, 'sparkles')
 ON CONFLICT DO NOTHING;
