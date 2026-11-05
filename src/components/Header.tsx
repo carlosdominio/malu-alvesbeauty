@@ -1,0 +1,92 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Scissors, Calendar, DollarSign, Users, Clock, Settings, MessageSquare, ExternalLink } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface HeaderProps {
+  nomeBarbearia?: string;
+  isAdmin?: boolean;
+}
+
+export function Header({ nomeBarbearia = "Barbearia Imperial", isAdmin = false }: HeaderProps) {
+  const pathname = usePathname();
+
+  const navLinks = [
+    { href: "/admin", label: "Agenda", icon: Calendar },
+    { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
+    { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign },
+    { href: "/admin/servicos", label: "Serviços", icon: Scissors },
+    { href: "/admin/clientes", label: "Clientes", icon: Users },
+    { href: "/admin/horarios", label: "Horários", icon: Clock },
+    { href: "/admin/config", label: "Config", icon: Settings },
+  ];
+
+  return (
+    <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        {/* Logo / Brand */}
+        <Link href={isAdmin ? "/admin" : "/"} className="flex items-center gap-2.5 group">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-zinc-950 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
+            <Scissors className="w-5 h-5 stroke-[2.5]" />
+          </div>
+          <div>
+            <h1 className="text-base font-extrabold tracking-tight text-zinc-100 group-hover:text-amber-400 transition-colors">
+              {nomeBarbearia}
+            </h1>
+            <p className="text-[10px] uppercase font-bold tracking-widest text-amber-500">
+              {isAdmin ? "Painel de Controle" : "Agendamento Online"}
+            </p>
+          </div>
+        </Link>
+
+        {/* Desktop Navigation for Admin */}
+        {isAdmin && (
+          <nav className="hidden md:flex items-center gap-1">
+            {navLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all",
+                    isActive
+                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold"
+                      : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  {link.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
+
+        {/* Action Button */}
+        <div className="flex items-center gap-2">
+          {isAdmin ? (
+            <Link
+              href="/agendar"
+              target="_blank"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+            >
+              <span>Ver Link da Bio</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          ) : (
+            <Link
+              href="/admin"
+              className="text-xs font-semibold text-zinc-400 hover:text-zinc-200 px-3 py-1.5 rounded-xl hover:bg-zinc-900 transition-colors"
+            >
+              Área do Dono
+            </Link>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}

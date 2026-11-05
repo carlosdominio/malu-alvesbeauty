@@ -1,0 +1,16 @@
+{
+  "name": "BarberOS • Barbearia Imperial",
+  "short_name": "BarberOS",
+  "description": "Agendamento rápido e gestão completa para barbearia",
+  "start_url": "/agendar",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

@@ -1,0 +1,247 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Plus, Scissors, Pencil, Trash2, Check, X } from "lucide-react";
+import { Servico } from "@/types";
+import { DataStore } from "@/lib/dataStore";
+import { formatarMoeda, cn } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+
+export default function ServicosPage() {
+  const [servicos, setServicos] = useState<Servico[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalAberto, setModalAberto] = useState(false);
+  const [editandoServico, setEditandoServico] = useState<Servico | null>(null);
+
+  // Form states
+  const [titulo, setTitulo] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [preco, setPreco] = useState("");
+  const [duracao, setDuracao] = useState("30");
+
+  const carregarServicos = async () => {
+    setLoading(true);
+    const data = await DataStore.getServicos();
+    setServicos(data);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    carregarServicos();
+  }, []);
+
+  const abrirModalNovo = () => {
+    setEditandoServico(null);
+    setTitulo("");
+    setDescricao("");
+    setPreco("");
+    setDuracao("30");
+    setModalAberto(true);
+  };
+
+  const abrirModalEditar = (s: Servico) => {
+    setEditandoServico(s);
+    setTitulo(s.titulo);
+    setDescricao(s.descricao || "");
+    setPreco(String(s.preco));
+    setDuracao(String(s.duracao_minutos));
+    setModalAberto(true);
+  };
+
+  const handleSalvar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await DataStore.saveServico({
+      id: editandoServico?.id,
+      titulo,
+      descricao,
+      preco: parseFloat(preco.replace(",", ".")),
+      duracao_minutos: parseInt(duracao, 10),
+      ativo: editandoServico ? editandoServico.ativo : true,
+    });
+    setModalAberto(false);
+    carregarServicos();
+  };
+
+  const handleToggleAtivo = async (id: string) => {
+    await DataStore.toggleServicoAtivo(id);
+    carregarServicos();
+  };
+
+  const handleExcluir = async (id: string) => {
+    if (confirm("Tem certeza que deseja excluir este serviço?")) {
+      await DataStore.deleteServico(id);
+      carregarServicos();
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-zinc-100">Catálogo de Serviços</h2>
+          <p className="text-xs text-zinc-400">
+            Cadastre os cortes, barbas, combos e defina preços e duração.
+          </p>
+        </div>
+
+        <Button
+          variant="gold"
+          size="sm"
+          onClick={abrirModalNovo}
+          className="flex items-center gap-1.5 text-xs"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Novo Serviço</span>
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="p-12 text-center text-zinc-500 text-sm">Carregando catálogo...</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {servicos.map((s) => (
+            <div
+              key={s.id}
+              className={cn(
+                "p-5 rounded-2xl border transition-all flex flex-col justify-between gap-4",
+                s.ativo
+                  ? "bg-zinc-900 border-zinc-800"
+                  : "bg-zinc-900/40 border-zinc-800/40 opacity-60"
+              )}
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
+                      <Scissors className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-zinc-100 text-base">{s.titulo}</h3>
+                      <p className="text-xs text-zinc-400">{s.duracao_minutos} minutos de atendimento</p>
+                    </div>
+                  </div>
+
+                  <span className="text-base font-black text-amber-400">
+                    {formatarMoeda(s.preco)}
+                  </span>
+                </div>
+
+                {s.descricao && (
+                  <p className="text-xs text-zinc-400 mt-3 line-clamp-2 leading-relaxed">
+                    {s.descricao}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => handleToggleAtivo(s.id)}
+                  className={cn(
+                    "text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors flex items-center gap-1.5",
+                    s.ativo
+                      ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                      : "text-zinc-400 bg-zinc-800 border-zinc-700"
+                  )}
+                >
+                  {s.ativo ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                  <span>{s.ativo ? "Ativo no Site" : "Inativo"}</span>
+                </button>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => abrirModalEditar(s)}
+                    className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                    title="Editar"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleExcluir(s.id)}
+                    className="p-2 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    title="Excluir"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal Cadastro/Edição de Serviço */}
+      <Modal
+        isOpen={modalAberto}
+        onClose={() => setModalAberto(false)}
+        title={editandoServico ? "Editar Serviço" : "Novo Serviço"}
+      >
+        <form onSubmit={handleSalvar} className="space-y-4">
+          <div>
+            <label className="text-xs font-bold text-zinc-300 block mb-1">Título do Serviço</label>
+            <input
+              type="text"
+              required
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Ex: Corte Degradê Navalhado"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-zinc-300 block mb-1">Descrição (opcional)</label>
+            <textarea
+              rows={2}
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex: Finalizado com toalha quente e pomada matte."
+              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-zinc-300 block mb-1">Preço (R$)</label>
+              <input
+                type="number"
+                step="0.50"
+                required
+                value={preco}
+                onChange={(e) => setPreco(e.target.value)}
+                placeholder="35.00"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-zinc-300 block mb-1">Duração (Minutos)</label>
+              <select
+                value={duracao}
+                onChange={(e) => setDuracao(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+              >
+                <option value="10">10 minutos</option>
+                <option value="15">15 minutos</option>
+                <option value="20">20 minutos</option>
+                <option value="25">25 minutos</option>
+                <option value="30">30 minutos</option>
+                <option value="40">40 minutos</option>
+                <option value="45">45 minutos</option>
+                <option value="50">50 minutos</option>
+                <option value="60">1 hora</option>
+                <option value="90">1h30</option>
+              </select>
+            </div>
+          </div>
+
+          <Button type="submit" variant="gold" size="lg" className="w-full font-bold">
+            Salvar Serviço
+          </Button>
+        </form>
+      </Modal>
+    </div>
+  );
+}
