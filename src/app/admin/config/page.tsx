@@ -61,17 +61,17 @@ export default function ConfigPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h2 className="text-2xl font-black text-zinc-100">Configurações da Barbearia</h2>
+        <h2 className="text-2xl font-black text-zinc-100">Configurações do Studio</h2>
         <p className="text-xs text-zinc-400">
-          Personalize as informações da sua barbearia, chave Pix e regras de agendamento.
+          Personalize as informações do seu studio, chave Pix e regras de agendamento.
         </p>
       </div>
 
       <form onSubmit={handleSalvar} className="space-y-5 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-xl">
-        {/* Nome da Barbearia */}
+        {/* Nome do Studio */}
         <div>
           <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
-            Nome da Barbearia
+            Nome do Studio
           </label>
           <input
             type="text"
@@ -100,7 +100,7 @@ export default function ConfigPage() {
         {/* Chave Pix para Recebimento */}
         <div>
           <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
-            Chave Pix da Barbearia
+            Chave Pix do Studio
           </label>
           <input
             type="text"

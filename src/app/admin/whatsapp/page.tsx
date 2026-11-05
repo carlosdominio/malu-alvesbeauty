@@ -148,11 +148,11 @@ export default function WhatsAppPage() {
 
   const reiniciarChat = useCallback(() => {
     const msgBoasVindas =
-      `💈 *Olá! Bem-vindo à Barbearia Imperial!*\n\n` +
-      `Eu sou o assistente virtual. Como posso te ajudar hoje?\n\n` +
+      `✨ *Olá! Bem-vinda ao Studio Malu Alves Beauty!*\n\n` +
+      `Eu sou a assistente virtual. Como posso te ajudar hoje?\n\n` +
       `Digite *1* para Agendar um Horário\n` +
-      `Digite *2* para Ver Nossos Serviços e Preços\n` +
-      `Digite *3* para Falar com o Dono`;
+      `Digite *2* para Ver Nossos Procedimentos e Valores\n` +
+      `Digite *3* para Falar com a Equipe`;
 
     setMensagens([
       {
@@ -202,22 +202,22 @@ export default function WhatsAppPage() {
 
       // ESTÁGIO 1: MENU PRINCIPAL
       if (botStep === "INICIAL") {
-        if (lower.includes("1") || lower.includes("agendar") || lower.includes("marcar") || lower.includes("corte") || lower.includes("horário")) {
+        if (lower.includes("1") || lower.includes("agendar") || lower.includes("marcar") || lower.includes("sobrancelha") || lower.includes("horário")) {
           respostaBot =
-            `✂️ *Escolha o serviço desejado:*\n\n` +
+            `✨ *Escolha o procedimento desejado:*\n\n` +
             servicos.map((s, idx) => `*${idx + 1}* - ${s.titulo} (${formatarMoeda(s.preco)} - ${s.duracao_minutos}min)`).join("\n") +
-            `\n\n_Digite o número do serviço desejado:_`;
+            `\n\n_Digite o número do procedimento desejado:_`;
           setBotStep("ESCOLHENDO_SERVICO");
-        } else if (lower.includes("2") || lower.includes("preço") || lower.includes("serviço")) {
+        } else if (lower.includes("2") || lower.includes("preço") || lower.includes("serviço") || lower.includes("procedimento")) {
           respostaBot =
-            `📋 *Nossa Tabela de Serviços:*\n\n` +
+            `📋 *Nossa Tabela de Procedimentos:*\n\n` +
             servicos.map((s) => `• *${s.titulo}*: ${formatarMoeda(s.preco)} (${s.duracao_minutos} min)`).join("\n") +
             `\n\nDigite *1* para agendar seu horário!`;
         } else {
           respostaBot =
-            `💈 *Barbearia Imperial*\n\n` +
+            `✨ *Studio Malu Alves Beauty*\n\n` +
             `Para agendar um horário com facilidade, digite *1*.\n` +
-            `Para ver nossos preços, digite *2*.`;
+            `Para ver nossos valores, digite *2*.`;
         }
       }
 
@@ -297,12 +297,12 @@ export default function WhatsAppPage() {
         respostaBot =
           `🎉 *AGENDAMENTO CONFIRMADO COM SUCESSO!* 🎉\n\n` +
           `👤 *Cliente:* ${nomeCliente}\n` +
-          `💈 *Serviço:* ${servicoEscolhido.titulo}\n` +
+          `✨ *Procedimento:* ${servicoEscolhido.titulo}\n` +
           `📅 *Data:* Hoje às *${slotEscolhido.hora_inicio}*\n` +
           `💵 *Valor:* ${formatarMoeda(servicoEscolhido.preco)}\n` +
-          `📍 *Local:* Barbearia Imperial\n\n` +
-          `✅ _Já inseri seu horário na agenda do barbeiro! Te mandaremos uma mensagem de lembrete 2h antes._\n\n` +
-          `Até mais! 👊`;
+          `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+          `✅ _Já inseri seu horário na agenda da designer! Te mandaremos uma mensagem de lembrete 2h antes._\n\n` +
+          `Aguardamos você! ✨`;
         setBotStep("FINALIZADO");
       }
 
@@ -330,7 +330,7 @@ export default function WhatsAppPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-black text-zinc-100">WhatsApp da Barbearia</h2>
+            <h2 className="text-2xl font-black text-zinc-100">WhatsApp do Studio</h2>
             <Badge variant="gold" className="flex items-center gap-1 text-[10px]">
               <Zap className="w-3 h-3" />
               Robô Automático
@@ -516,10 +516,10 @@ export default function WhatsAppPage() {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-zinc-100 flex items-center gap-1.5">
-                    <span>Robô Barbearia</span>
+                    <span>Atendente Virtual</span>
                     <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   </h4>
-                  <p className="text-[11px] text-zinc-400">Atendente Virtual da Barbearia</p>
+                  <p className="text-[11px] text-zinc-400">Atendente do Studio Malu Alves Beauty</p>
                 </div>
               </div>
 

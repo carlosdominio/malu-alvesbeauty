@@ -203,8 +203,8 @@ class WhatsAppBotService {
           `\n\nDigite *1* para agendar seu horário!`;
       } else {
         const saudacao = clienteExistente
-          ? `Fala ${clienteExistente.nome.split(" ")[0]}! Bom te ver de novo! 👋`
-          : `Olá, ${pushName}! Bem-vindo à Barbearia Imperial! 💈`;
+          ? `Olá ${clienteExistente.nome.split(" ")[0]}! Bom te ver de novo! ✨`
+          : `Olá, ${pushName}! Bem-vinda ao Studio Malu Alves Beauty! ✨`;
 
         respostaTexto =
           `💈 *${saudacao}*\n\n` +
@@ -304,12 +304,12 @@ class WhatsAppBotService {
       respostaTexto =
         `🎉 *AGENDAMENTO CONFIRMADO!* 🎉\n\n` +
         `👤 *Cliente:* ${nomeCliente}\n` +
-        `💈 *Serviço:* ${session.servicoEscolhido.titulo}\n` +
+        `✨ *Procedimento:* ${session.servicoEscolhido.titulo}\n` +
         `📅 *Data:* Hoje às *${session.slotEscolhido.hora_inicio}*\n` +
         `💵 *Valor:* ${formatarMoeda(session.servicoEscolhido.preco)}\n` +
-        `📍 *Local:* Barbearia Imperial\n\n` +
-        `✅ _Seu horário já foi reservado na agenda do barbeiro! Enviaremos um lembrete 2h antes._\n\n` +
-        `Até mais! 👊`;
+        `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+        `✅ _Seu horário já foi reservado na agenda da designer! Enviaremos um lembrete 2h antes._\n\n` +
+        `Aguardamos você! ✨`;
 
       // Resetar sessão
       session = { step: "INICIAL" };

@@ -10,7 +10,7 @@ interface HeaderProps {
   isAdmin?: boolean;
 }
 
-export function Header({ nomeBarbearia = "Barbearia Imperial", isAdmin = false }: HeaderProps) {
+export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = false }: HeaderProps) {
   const pathname = usePathname();
 
   const navLinks = [

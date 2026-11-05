@@ -10,8 +10,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "BarberOS • Sistema da Barbearia",
-  description: "Agendamento online rápido para clientes e sistema operacional completo para o dono da barbearia.",
+  title: "Studio Malu Alves Beauty • Agendamento Online",
+  description: "Agendamento online de design de sobrancelhas e procedimentos no Studio Malu Alves Beauty.",
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.ico",

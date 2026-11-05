@@ -47,13 +47,12 @@ function lerBancoCentral() {
   return { servicos: [], agendamentos: [], clientes: [], config: {} };
 }
 
-// Serviços Padrão da Barbearia
+// Serviços Padrão do Studio
 const servicosPadrao = [
-  { id: "serv-1", titulo: "Corte Degradê / Social", preco: 35.0, duracao_minutos: 30 },
-  { id: "serv-2", titulo: "Barba Terapia Completa", preco: 25.0, duracao_minutos: 25 },
-  { id: "serv-3", titulo: "Combo Corte + Barba", preco: 50.0, duracao_minutos: 50 },
-  { id: "serv-4", titulo: "Sobrancelha na Navalha", preco: 15.0, duracao_minutos: 10 },
-  { id: "serv-5", titulo: "Pigmentação Barba / Cabelo", preco: 20.0, duracao_minutos: 20 },
+  { id: "serv-1", titulo: "Design de Sobrancelhas Simples", preco: 30.0, duracao_minutos: 30 },
+  { id: "serv-2", titulo: "Design com Henna", preco: 45.0, duracao_minutos: 45 },
+  { id: "serv-3", titulo: "Brow Lamination", preco: 80.0, duracao_minutos: 50 },
+  { id: "serv-4", titulo: "Epilação Facial / Buço", preco: 20.0, duracao_minutos: 15 },
 ];
 
 function obterServicosAtivos() {
@@ -315,19 +314,19 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
           servicosAtivos.map((s, idx) => `*${idx + 1}* - ${s.titulo} (${formatarMoeda(s.preco)} - ${s.duracao_minutos}min)`).join("\n") +
           `\n\n_Digite o número do serviço desejado:_`;
         session = { step: "ESCOLHENDO_SERVICO", nomeCliente: nomeDetectado };
-      } else if (textoLimpo === "3" || textoLimpo.includes("dono") || textoLimpo.includes("barbeiro")) {
-        resposta = `👨‍💼 Um momento, ${nomeDetectado}! Já avisei o barbeiro e ele irá falar com você em instantes.`;
+      } else if (textoLimpo === "3" || textoLimpo.includes("dono") || textoLimpo.includes("designer") || textoLimpo.includes("atendente")) {
+        resposta = `👩‍💼 Um momento, ${nomeDetectado}! Já avisei a designer e ela irá falar com você em instantes.`;
       } else {
         resposta =
-          `💈 *Olá ${nomeDetectado}!* 💈\n\n` +
+          `✨ *Olá ${nomeDetectado}!* ✨\n\n` +
           `📅 *Você já possui um agendamento confirmado:*\n` +
           `• *${agendamentoAtivo.servico_titulo}*\n` +
           `• *Data:* ${dataStr} às *${horaStr}*\n` +
-          `• *Local:* Barbearia Imperial\n\n` +
+          `• *Local:* Studio Malu Alves Beauty\n\n` +
           `Como posso te ajudar hoje?\n\n` +
           `*1* ➔ Cancelar / Remarcar este horário\n` +
           `*2* ➔ Fazer um novo agendamento adicional\n` +
-          `*3* ➔ Falar com o Barbeiro\n\n` +
+          `*3* ➔ Falar com a Designer\n\n` +
           `_Digite o número da opção desejada:_`;
       }
     }
@@ -337,7 +336,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
         textoLimpo === "1" ||
         textoLimpo.includes("agendar") ||
         textoLimpo.includes("marcar") ||
-        textoLimpo.includes("corte") ||
+        textoLimpo.includes("sobrancelha") ||
         textoLimpo.includes("horario") ||
         textoLimpo.includes("horário")
       ) {
@@ -354,35 +353,35 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
           const listaDias = diasDisponiveis.map((d, i) => `*${i + 1}* - ${d.rotulo}`).join("\n");
 
           resposta =
-            `Fala *${nomeDetectado}*! 💈\n` +
+            `Olá *${nomeDetectado}*! ✨\n` +
             `Vamos marcar seu *${ultimoSrv.titulo}* (${formatarMoeda(ultimoSrv.preco)})?\n\n` +
             `📅 *Escolha o dia:*\n\n${listaDias}\n\n` +
-            `_Digite o número do dia (ou digite *Outro* para mudar o serviço):_`;
+            `_Digite o número do dia (ou digite *Outro* para mudar o procedimento):_`;
         } else {
           resposta =
-            `✂️ *Escolha o serviço desejado:*\n\n` +
+            `✨ *Escolha o procedimento desejado:*\n\n` +
             servicosAtivos.map((s, idx) => `*${idx + 1}* - ${s.titulo} (${formatarMoeda(s.preco)} - ${s.duracao_minutos}min)`).join("\n") +
-            `\n\n_Digite o número do serviço desejado (ex: 1, 2 ou 3):_`;
+            `\n\n_Digite o número do procedimento desejado (ex: 1, 2 ou 3):_`;
           session = { step: "ESCOLHENDO_SERVICO", nomeCliente: nomeDetectado };
         }
-      } else if (textoLimpo === "2" || textoLimpo.includes("preço") || textoLimpo.includes("serviço")) {
+      } else if (textoLimpo === "2" || textoLimpo.includes("preço") || textoLimpo.includes("serviço") || textoLimpo.includes("procedimento")) {
         resposta =
-          `📋 *Nossa Tabela de Serviços:*\n\n` +
+          `📋 *Nossa Tabela de Procedimentos:*\n\n` +
           servicosAtivos.map((s) => `• *${s.titulo}*: ${formatarMoeda(s.preco)} (${s.duracao_minutos} min)`).join("\n") +
           `\n\nDigite *1* para agendar seu horário!`;
-      } else if (textoLimpo === "3" || textoLimpo.includes("dono") || textoLimpo.includes("humano")) {
-        resposta = `👨‍💼 Um momento, ${nomeDetectado}! Já notifiquei o barbeiro e ele irá te responder em instantes por aqui.`;
+      } else if (textoLimpo === "3" || textoLimpo.includes("dono") || textoLimpo.includes("humano") || textoLimpo.includes("designer")) {
+        resposta = `👩‍💼 Um momento, ${nomeDetectado}! Já notifiquei a equipe e iremos te responder em instantes por aqui.`;
       } else {
         const saudacao = clienteCadastrado
-          ? `Fala ${nomeDetectado}! Bom te ver de novo! 👋 (${clienteCadastrado.total_visitas || 1} cortes no Cartão Fidelidade ⭐)`
-          : `Olá, ${nomeDetectado}! Bem-vindo à Barbearia Imperial! 💈`;
+          ? `Olá ${nomeDetectado}! Que bom ter você de volta! ✨ (${clienteCadastrado.total_visitas || 1} atendimentos no Cartão Fidelidade ⭐)`
+          : `Olá, ${nomeDetectado}! Bem-vinda ao Studio Malu Alves Beauty! ✨`;
 
         resposta =
-          `💈 *${saudacao}*\n\n` +
+          `✨ *${saudacao}*\n\n` +
           `Como posso te ajudar hoje?\n\n` +
           `*1* ➔ Agendar um Horário\n` +
-          `*2* ➔ Ver Serviços e Preços\n` +
-          `*3* ➔ Falar com o Dono\n\n` +
+          `*2* ➔ Ver Procedimentos e Valores\n` +
+          `*3* ➔ Falar com a Equipe\n\n` +
           `_Digite o número da opção desejada:_`;
       }
     }
@@ -407,11 +406,11 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       const listaDias = diasDisponiveis.map((d, i) => `*${i + 1}* - ${d.rotulo}`).join("\n");
 
       resposta =
-        `✅ Serviço selecionado: *${srv.titulo}* (${formatarMoeda(srv.preco)})\n\n` +
+        `✅ Procedimento selecionado: *${srv.titulo}* (${formatarMoeda(srv.preco)})\n\n` +
         `📅 *Escolha o dia para seu atendimento:*\n\n${listaDias}\n\n` +
         `_Digite o número correspondente ao dia desejado (ex: 1 ou 2):_`;
     } else {
-      resposta = `Opção inválida. Digite o número de 1 a ${servicosAtivos.length} referente ao serviço:`;
+      resposta = `Opção inválida. Digite o número de 1 a ${servicosAtivos.length} referente ao procedimento:`;
     }
   }
 
@@ -421,9 +420,9 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   else if (session.step === "ESCOLHENDO_DIA") {
     if (textoLimpo === "outro" || textoLimpo.includes("mudar")) {
       resposta =
-        `✂️ *Escolha o serviço desejado:*\n\n` +
+        `✨ *Escolha o procedimento desejado:*\n\n` +
         servicosAtivos.map((s, idx) => `*${idx + 1}* - ${s.titulo} (${formatarMoeda(s.preco)} - ${s.duracao_minutos}min)`).join("\n") +
-        `\n\n_Digite o número do serviço desejado:_`;
+        `\n\n_Digite o número do procedimento desejado:_`;
       session = { step: "ESCOLHENDO_SERVICO", nomeCliente: session.nomeCliente || nomeDetectado };
     } else {
       const numDia = parseInt(textoLimpo, 10);
@@ -487,12 +486,12 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       resposta =
         `🎉 *AGENDAMENTO CONFIRMADO!* 🎉\n\n` +
         `👤 *Cliente:* ${nomeFinal}\n` +
-        `💈 *Serviço:* ${srv.titulo}\n` +
+        `✨ *Procedimento:* ${srv.titulo}\n` +
         `📅 *Data:* ${dataFormatada} às *${horarioEscolhido}*\n` +
         `💵 *Valor:* ${formatarMoeda(srv.preco)}\n` +
-        `📍 *Local:* Barbearia Imperial\n\n` +
-        `✅ _Seu horário já foi reservado na agenda do barbeiro! Enviaremos um lembrete 2h antes._\n\n` +
-        `Te esperamos lá! 👊`;
+        `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+        `✅ _Seu horário já foi reservado na agenda da designer! Enviaremos uma mensagem de lembrete 2h antes._\n\n` +
+        `Aguardamos você com muito carinho! ✨`;
 
       session = { step: "INICIAL" };
     } else {
@@ -650,7 +649,7 @@ async function disconnectWhatsApp() {
   }
 }
 
-// 1. Mensagem de Cancelamento pelo Barbeiro
+// 1. Mensagem de Cancelamento pelo Studio
 async function notificarCancelamentoAdmin(telefone, nomeCliente, dataHora) {
   const targetJid = await resolverRemoteJid(telefone);
   if (!sock || !targetJid) return false;
@@ -660,11 +659,11 @@ async function notificarCancelamentoAdmin(telefone, nomeCliente, dataHora) {
   const dataFormatada = dataPart ? dataPart.split("-").reverse().slice(0, 2).join("/") : "hoje";
 
   const mensagem =
-    `⚠️ *Aviso da Barbearia Imperial* ⚠️\n\n` +
-    `Olá, *${nomeCliente}*! Infelizmente o barbeiro precisou desmarcar o seu horário de *${dataFormatada}* às *${horaStr}* devido a um imprevisto.\n\n` +
+    `⚠️ *Aviso do Studio Malu Alves Beauty* ⚠️\n\n` +
+    `Olá, *${nomeCliente}*! Infelizmente a designer precisou desmarcar o seu horário de *${dataFormatada}* às *${horaStr}* devido a um imprevisto.\n\n` +
     `Pedimos sinceras desculpas pelo transtorno! Gostaria de remarcar para outro dia ou horário?\n\n` +
     `*1* ➔ Sim, ver dias e horários disponíveis\n` +
-    `*2* ➔ Falar com o Dono\n\n` +
+    `*2* ➔ Falar com a Designer\n\n` +
     `_Digite o número da opção desejada para remarcar:_`;
 
   console.log(`>>> [Cancelamento] Enviando mensagem para ${targetJid} (${nomeCliente})...`);
@@ -681,19 +680,19 @@ async function notificarConclusaoAdmin(telefone, nomeCliente, totalVisitas) {
   const visitas = totalVisitas || 1;
   const elegivelDesconto = visitas > 0 && visitas % 5 === 0;
 
-  let mensagemFidelidade = `⭐ Você possui *${visitas} ${visitas === 1 ? "corte realizado" : "cortes realizados"}* no seu Cartão Fidelidade.`;
+  let mensagemFidelidade = `⭐ Você possui *${visitas} ${visitas === 1 ? "atendimento realizado" : "atendimentos realizados"}* no seu Cartão Fidelidade.`;
   if (elegivelDesconto) {
     mensagemFidelidade =
-      `🎉 *PARABÉNS!* Você completou seu 5º corte no Cartão Fidelidade!\n` +
-      `🎯 No seu próximo corte você tem direito a um *Super Desconto Especial!*`;
+      `🎉 *PARABÉNS!* Você completou seu 5º atendimento no Cartão Fidelidade!\n` +
+      `🎯 No seu próximo procedimento você tem direito a um *Super Desconto Especial!*`;
   }
 
   const mensagem =
-    `✂️ *Obrigado pela preferência, ${nomeCliente}!* 💈\n\n` +
-    `Foi um prazer atendê-lo na Barbearia Imperial! Esperamos que tenha curtido o resultado do corte.\n\n` +
+    `✨ *Obrigada pela preferência, ${nomeCliente}!* ✨\n\n` +
+    `Foi um imenso prazer atendê-la no Studio Malu Alves Beauty! Esperamos que tenha amado o resultado das suas sobrancelhas.\n\n` +
     `${mensagemFidelidade}\n\n` +
-    `Quando precisar renovar o visual novamente, basta me mandar um *Oi* por aqui! 👊\n` +
-    `Tenha um excelente dia!`;
+    `Quando desejar realçar seu olhar novamente, basta me mandar um *Oi* por aqui! 💖\n` +
+    `Tenha um dia maravilhoso!`;
 
   console.log(`>>> [Agradecimento] Enviando mensagem para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
@@ -710,10 +709,10 @@ async function notificarFaltaAdmin(telefone, nomeCliente, servicoTitulo, dataHor
 
   const mensagem =
     `👋 *Olá, ${nomeCliente}! Tudo bem?*\n\n` +
-    `Notamos que você não conseguiu comparecer ao seu horário de hoje às *${horaStr}* para o serviço *${servicoTitulo || "Corte"}*.\n\n` +
-    `Imprevistos acontecem! Se quiser escolher outro dia ou horário para cortar o cabelo, é bem fácil:\n\n` +
+    `Notamos que você não conseguiu comparecer ao seu horário de hoje às *${horaStr}* para o procedimento *${servicoTitulo || "Design de Sobrancelhas"}*.\n\n` +
+    `Imprevistos acontecem! Se quiser escolher outro dia ou horário para fazer seu procedimento, é bem fácil:\n\n` +
     `*1* ➔ Remarcar meu horário agora\n` +
-    `*2* ➔ Falar com o Barbeiro\n\n` +
+    `*2* ➔ Falar com a Equipe\n\n` +
     `_Digite o número desejado:_`;
 
   console.log(`>>> [Falta] Enviando mensagem de remarcação para ${targetJid} (${nomeCliente})...`);
@@ -735,14 +734,14 @@ async function notificarConfirmacaoWeb(telefone, nomeCliente, servicoTitulo, dat
   const dataFormatada = dataPart ? dataPart.split("-").reverse().slice(0, 2).join("/") : "hoje";
 
   const mensagem =
-    `🎉 *AGENDAMENTO CONFIRMADO VIA APP!* 💈\n\n` +
-    `Olá, *${nomeCliente}*! Seu horário foi reservado com sucesso pelo aplicativo.\n\n` +
-    `• *Serviço:* ${servicoTitulo || "Corte"}\n` +
+    `🎉 *AGENDAMENTO CONFIRMADO VIA SITE!* ✨\n\n` +
+    `Olá, *${nomeCliente}*! Seu horário foi reservado com sucesso pelo site.\n\n` +
+    `• *Procedimento:* ${servicoTitulo || "Design de Sobrancelhas"}\n` +
     `• *Data:* ${dataFormatada} às *${horaStr}*\n` +
-    `• *Valor:* ${formatarMoeda(valor || 35)}\n` +
-    `📍 *Local:* Barbearia Imperial\n\n` +
-    `✅ _Seu horário já está garantido na agenda do barbeiro! Te mandaremos um lembrete 2h antes._\n\n` +
-    `Te esperamos lá! 👊`;
+    `• *Valor:* ${formatarMoeda(valor || 30)}\n` +
+    `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+    `✅ _Seu horário já está garantido na agenda da designer! Te mandaremos um lembrete 2h antes._\n\n` +
+    `Esperamos por você! ✨`;
 
   console.log(`>>> [Confirmacao Web] Enviando comprovante para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });

@@ -189,7 +189,7 @@ export default function AgendarPage() {
             </div>
             <div>
               <h1 className="font-extrabold text-base text-zinc-100 tracking-tight leading-tight">
-                {config?.nome_barbearia || "Barbearia Imperial"}
+                {config?.nome_barbearia || "Studio Malu Alves Beauty"}
               </h1>
               <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -271,7 +271,7 @@ export default function AgendarPage() {
                   className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 text-sm transition-all"
                 >
                   <Phone className="w-4 h-4" />
-                  <span>Enviar no WhatsApp da Barbearia</span>
+                  <span>Enviar no WhatsApp do Studio</span>
                 </a>
 
                 <Button
