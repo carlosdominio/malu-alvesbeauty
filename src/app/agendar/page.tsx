@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { Agendamento, BarbeariaConfig, Cliente, ExpedienteDia, HorarioSlot, Servico } from "@/types";
 import { DataStore } from "@/lib/dataStore";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { calcularSlotsDisponiveis } from "@/lib/appointmentEngine";
 import { cn, formatarData, formatarMoeda } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -40,6 +42,88 @@ export default function AgendarPage() {
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [loading, setLoading] = useState(false);
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState<Agendamento | null>(null);
+
+  // Relógio em tempo real
+  const [agora, setAgora] = useState<Date>(new Date());
+
+  // Timer para atualizar relógio do status a cada 10s
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAgora(new Date());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Sincronização em tempo real (Polling + Foco na janela + Supabase Realtime)
+  useEffect(() => {
+    const sincronizarTudo = async () => {
+      try {
+        const [novoExp, novoCfg, novosSrvs] = await Promise.all([
+          DataStore.getExpediente(),
+          DataStore.getConfig(),
+          DataStore.getServicos(),
+        ]);
+        setExpediente(novoExp);
+        setConfig(novoCfg);
+        setServicos(novosSrvs.filter((s) => s.ativo));
+      } catch (err) {
+        console.error("Erro na sincronização em tempo real:", err);
+      }
+    };
+
+    // Polling a cada 4 segundos para garantir atualização imediata
+    const syncInterval = setInterval(sincronizarTudo, 4000);
+
+    // Eventos de foco e retorno à aba
+    const handleFocusOrVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        sincronizarTudo();
+      }
+    };
+
+    window.addEventListener("focus", handleFocusOrVisible);
+    document.addEventListener("visibilitychange", handleFocusOrVisible);
+
+    // BroadcastChannel para sincronização instantânea entre abas no mesmo navegador
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        bc = new BroadcastChannel("studio_updates");
+        bc.onmessage = () => {
+          sincronizarTudo();
+        };
+      } catch {}
+    }
+
+    // Supabase Realtime Channel
+    let channel: RealtimeChannel | null = null;
+    if (isSupabaseConfigured && supabase) {
+      channel = supabase
+        .channel("agendar-expediente-realtime")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "expediente" },
+          () => {
+            sincronizarTudo();
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      clearInterval(syncInterval);
+      window.removeEventListener("focus", handleFocusOrVisible);
+      document.removeEventListener("visibilitychange", handleFocusOrVisible);
+      if (bc) {
+        try {
+          bc.close();
+        } catch {}
+      }
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, []);
 
   // 1. Carregar dados iniciais
   useEffect(() => {
@@ -179,7 +263,6 @@ export default function AgendarPage() {
       return { estaAberto: true, badgeTexto: "Agendamento Online", statusCor: "emerald" };
     }
 
-    const agora = new Date();
     const diaSemana = agora.getDay();
     const expHoje = expediente.find((e) => e.dia_semana === diaSemana);
 
@@ -253,7 +336,7 @@ export default function AgendarPage() {
   // Gerar opções dos próximos 7 dias
   const gerarProximosDias = () => {
     const dias = [];
-    const hoje = new Date();
+    const hoje = agora;
     for (let i = 0; i < 7; i++) {
       const d = new Date(hoje);
       d.setDate(hoje.getDate() + i);

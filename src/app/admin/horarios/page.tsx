@@ -38,10 +38,23 @@ export default function HorariosPage() {
 
   const handleSalvar = async () => {
     setSalvando(true);
-    await DataStore.updateExpediente(expedientes);
-    setSalvando(false);
-    setSucesso(true);
-    setTimeout(() => setSucesso(false), 3000);
+    try {
+      await DataStore.updateExpediente(expedientes);
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        try {
+          const bc = new BroadcastChannel("studio_updates");
+          bc.postMessage("expediente_updated");
+          bc.close();
+        } catch {}
+      }
+      setSucesso(true);
+      setTimeout(() => setSucesso(false), 3000);
+    } catch (e) {
+      console.error("Erro ao salvar:", e);
+      alert("Erro ao salvar horários. Tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
   };
 
   return (

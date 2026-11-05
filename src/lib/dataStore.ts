@@ -134,6 +134,17 @@ export const DataStore = {
 
   // 3. EXPEDIENTE
   async getExpediente(): Promise<ExpedienteDia[]> {
+    try {
+      const res = await fetch("/api/expediente", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setLocal(KEYS.EXPEDIENTE, data);
+          return data;
+        }
+      }
+    } catch {}
+
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase.from("expediente").select("*").order("dia_semana", { ascending: true });
       if (!error && data && data.length > 0) return data as ExpedienteDia[];
@@ -143,6 +154,14 @@ export const DataStore = {
 
   async updateExpediente(expedientes: ExpedienteDia[]): Promise<void> {
     setLocal(KEYS.EXPEDIENTE, expedientes);
+    try {
+      await fetch("/api/expediente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(expedientes),
+      });
+    } catch {}
+
     if (isSupabaseConfigured && supabase) {
       await supabase.from("expediente").upsert(expedientes);
     }
