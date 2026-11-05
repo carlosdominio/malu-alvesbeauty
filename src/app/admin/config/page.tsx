@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, Check, Trash2, AlertTriangle, RefreshCw } from "lucide-react";
+import { Save, Check, Trash2, AlertTriangle, RefreshCw, ShieldCheck, Lock, User, Eye, EyeOff, Sparkles } from "lucide-react";
 import { BarbeariaConfig } from "@/types";
 import { DataStore } from "@/lib/dataStore";
 import { Button } from "@/components/ui/Button";
@@ -12,12 +12,25 @@ export default function ConfigPage() {
   const [config, setConfig] = useState<BarbeariaConfig | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
+  const [mostrarSenha, setMostrarSenha] = useState(false);
 
   // Estados de Limpeza de Dados
   const [modalLimparAberto, setModalLimparAberto] = useState(false);
   const [limpando, setLimpando] = useState(false);
 
   const { toastSuccess, toastWarning } = useToast();
+
+  const gerarSenhaAleatoria = () => {
+    if (!config) return;
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$";
+    let pass = "";
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setConfig({ ...config, admin_senha: pass });
+    setMostrarSenha(true);
+    toastSuccess("Nova Senha Gerada!", `Senha gerada: ${pass}. Clique em Salvar.`);
+  };
 
   useEffect(() => {
     DataStore.getConfig().then(setConfig);
@@ -206,6 +219,96 @@ export default function ConfigPage() {
           <p className="text-[11px] text-zinc-400 mt-1">
             O sistema limpa da agenda os cancelamentos e faltas mais antigos que esse prazo automaticamente, sem apagar o histórico de atendimentos nem os pontos de fidelidade dos clientes.
           </p>
+        </div>
+
+        {/* SEGURANÇA & ACESSO AO PAINEL ADMINISTRATIVO */}
+        <div className="pt-4 border-t border-zinc-800 space-y-4">
+          <div className="flex items-center gap-2 text-sm font-bold text-amber-400">
+            <ShieldCheck className="w-5 h-5 text-amber-400" />
+            <span>Segurança & Senha de Acesso ao Painel</span>
+          </div>
+          <p className="text-xs text-zinc-400">
+            Defina o usuário e a senha que serão solicitados na tela de login para acessar o painel do Studio.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Usuário Administrador */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
+                Usuário Administrador
+              </label>
+              <div className="relative">
+                <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  required
+                  value={config.admin_usuario || "admin"}
+                  onChange={(e) => setConfig({ ...config, admin_usuario: e.target.value })}
+                  placeholder="Ex: admin"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-semibold"
+                />
+              </div>
+            </div>
+
+            {/* Senha de Acesso */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block">
+                  Senha de Acesso
+                </label>
+                <button
+                  type="button"
+                  onClick={gerarSenhaAleatoria}
+                  className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
+                  title="Gerar uma nova senha segura aleatória"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Gerar Senha Forte</span>
+                </button>
+              </div>
+
+              <div className="relative">
+                <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type={mostrarSenha ? "text" : "password"}
+                  required
+                  value={config.admin_senha || "Malu@2026"}
+                  onChange={(e) => setConfig({ ...config, admin_senha: e.target.value })}
+                  placeholder="Digite a senha de acesso"
+                  className="w-full pl-10 pr-10 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-mono font-bold"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenha(!mostrarSenha)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  title={mostrarSenha ? "Ocultar senha" : "Ver senha"}
+                >
+                  {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Destaque das Credenciais Atuais */}
+          <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div>
+              <span className="text-zinc-400 block text-[11px]">Credenciais Atuais de Acesso:</span>
+              <span className="font-mono font-bold text-zinc-100">
+                Usuário: <span className="text-amber-400">{config.admin_usuario || "admin"}</span> • Senha:{" "}
+                <span className="text-amber-400">{config.admin_senha || "Malu@2026"}</span>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(`Usuário: ${config.admin_usuario || "admin"}\nSenha: ${config.admin_senha || "Malu@2026"}`);
+                toastSuccess("Copiado!", "Credenciais copiadas para a área de transferência.");
+              }}
+              className="text-[11px] font-bold text-amber-400 hover:underline shrink-0"
+            >
+              📋 Copiar Credenciais
+            </button>
+          </div>
         </div>
 
         <div className="pt-2">

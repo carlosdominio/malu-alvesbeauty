@@ -12,6 +12,8 @@ export interface BarbeariaConfig {
   regra_fidelidade_cortes?: number; // Ex: A cada 5 atendimentos ganha desconto
   porcentagem_desconto_fidelidade?: number; // Ex: 20%
   auto_limpeza_cancelados_dias?: number; // 0 = Desativado, 7, 15, 30, 60 dias
+  admin_usuario?: string;
+  admin_senha?: string;
 }
 
 export interface ExpedienteDia {

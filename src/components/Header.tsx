@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Calendar, DollarSign, Users, Clock, Settings, MessageSquare, ExternalLink } from "lucide-react";
+import { Sparkles, Calendar, DollarSign, Users, Clock, Settings, MessageSquare, ExternalLink, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -71,14 +71,28 @@ export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = f
         {/* Action Button */}
         <div className="flex items-center gap-2">
           {isAdmin ? (
-            <Link
-              href="/agendar"
-              target="_blank"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
-            >
-              <span>Ver Link da Bio</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/agendar"
+                target="_blank"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+              >
+                <span>Ver Link da Bio</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem("malu_admin_auth");
+                  document.cookie = "malu_admin_auth=; path=/; max-age=0";
+                  window.location.href = "/admin/login";
+                }}
+                className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                title="Sair do Painel"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           ) : (
             <Link
               href="/admin"

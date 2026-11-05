@@ -12,6 +12,8 @@ export const configInicial: BarbeariaConfig = {
   regra_fidelidade_cortes: 5,
   porcentagem_desconto_fidelidade: 20,
   auto_limpeza_cancelados_dias: 7,
+  admin_usuario: "admin",
+  admin_senha: "Malu@2026",
 };
 
 export const servicosIniciais: Servico[] = [
