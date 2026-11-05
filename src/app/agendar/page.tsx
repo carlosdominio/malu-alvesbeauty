@@ -18,7 +18,6 @@ import { calcularSlotsDisponiveis } from "@/lib/appointmentEngine";
 import { cn, formatarData, formatarMoeda } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { ReturningClientBanner } from "@/components/ReturningClientBanner";
-import Link from "next/link";
 
 export default function AgendarPage() {
   const [config, setConfig] = useState<BarbeariaConfig | null>(null);
@@ -199,13 +198,6 @@ export default function AgendarPage() {
               </p>
             </div>
           </div>
-
-          <Link
-            href="/admin"
-            className="text-[11px] text-zinc-400 hover:text-amber-400 font-medium px-2.5 py-1 rounded-lg border border-zinc-800 hover:border-amber-500/30 transition-colors"
-          >
-            Painel Dono
-          </Link>
         </div>
       </header>
 

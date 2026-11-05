@@ -140,19 +140,6 @@ export default function AdminLoginPage() {
             </Button>
           </form>
         </div>
-
-        {/* Lembrete de Credenciais Padrão */}
-        <div className="p-3.5 rounded-2xl bg-zinc-900/40 border border-zinc-800/60 text-center space-y-1">
-          <p className="text-[11px] text-zinc-500">
-            Acesso padrão inicial configurado:
-          </p>
-          <p className="text-xs font-mono font-bold text-amber-400">
-            Usuário: <span className="text-zinc-200">admin</span> • Senha: <span className="text-zinc-200">Malu@2026</span>
-          </p>
-          <p className="text-[10px] text-zinc-500">
-            (Você pode alterar o usuário e a senha a qualquer momento em <strong>Configurações</strong>)
-          </p>
-        </div>
       </div>
     </div>
   );

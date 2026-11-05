@@ -18,13 +18,6 @@ export default function Home() {
               Studio Malu Alves Beauty
             </span>
           </div>
-
-          <Link
-            href="/admin"
-            className="text-xs font-bold text-zinc-400 hover:text-amber-400 px-3 py-1.5 rounded-xl border border-zinc-800 hover:border-amber-500/30 transition-all"
-          >
-            Acesso do Dono
-          </Link>
         </div>
       </header>
 
