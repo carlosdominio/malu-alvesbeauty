@@ -105,7 +105,7 @@ export default function WhatsAppPage() {
   const handleIniciarConexao = async () => {
     setCarregandoAcao(true);
     try {
-      let res = await fetch(`${getBotEndpoint()}/start`, { method: "POST" }).catch(() => null);
+      const res = await fetch(`${getBotEndpoint()}/start`, { method: "POST" }).catch(() => null);
       if (!res || !res.ok) {
         await fetch("/api/whatsapp", {
           method: "POST",
@@ -125,7 +125,7 @@ export default function WhatsAppPage() {
   const handleDesconectar = async () => {
     setCarregandoAcao(true);
     try {
-      let res = await fetch(`${getBotEndpoint()}/disconnect`, { method: "POST" }).catch(() => null);
+      const res = await fetch(`${getBotEndpoint()}/disconnect`, { method: "POST" }).catch(() => null);
       if (!res || !res.ok) {
         await fetch("/api/whatsapp", {
           method: "POST",
