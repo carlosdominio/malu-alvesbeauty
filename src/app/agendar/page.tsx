@@ -54,10 +54,21 @@ export default function AgendarPage() {
       setServicos(srvs.filter((s) => s.ativo));
       setExpediente(exp);
 
-      // Data de hoje como padrão
+      // Selecionar o primeiro dia aberto a partir de hoje
       const hoje = new Date();
+      let dataPadrao = "";
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(hoje);
+        d.setDate(hoje.getDate() + i);
+        const diaSemana = d.getDay();
+        const expDoDia = exp.find((e) => e.dia_semana === diaSemana);
+        if (expDoDia && expDoDia.ativo) {
+          dataPadrao = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          break;
+        }
+      }
       const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
-      setDataSelecionada(hojeStr);
+      setDataSelecionada(dataPadrao || hojeStr);
 
       // Verificar se há cliente salvo no LocalStorage
       const salvoTel = localStorage.getItem("barber_saved_phone");
@@ -162,6 +173,83 @@ export default function AgendarPage() {
     }
   };
 
+  // Status em tempo real do Studio baseado nos expedientes cadastrados
+  const getStatusStudio = () => {
+    if (expediente.length === 0) {
+      return { estaAberto: true, badgeTexto: "Agendamento Online", statusCor: "emerald" };
+    }
+
+    const agora = new Date();
+    const diaSemana = agora.getDay();
+    const expHoje = expediente.find((e) => e.dia_semana === diaSemana);
+
+    // Fechado o dia todo hoje
+    if (!expHoje || !expHoje.ativo) {
+      return {
+        estaAberto: false,
+        badgeTexto: "Fechado Hoje",
+        statusCor: "red",
+      };
+    }
+
+    const horaAtual = agora.getHours();
+    const minutoAtual = agora.getMinutes();
+    const minutosAgora = horaAtual * 60 + minutoAtual;
+
+    const [hIni, mIni] = expHoje.hora_inicio.split(":").map(Number);
+    const minIni = hIni * 60 + (mIni || 0);
+
+    const [hFim, mFim] = expHoje.hora_fim.split(":").map(Number);
+    const minFim = hFim * 60 + (mFim || 0);
+
+    const horaIniFmt = expHoje.hora_inicio.slice(0, 5);
+    const horaFimFmt = expHoje.hora_fim.slice(0, 5);
+
+    // Antes de abrir hoje
+    if (minutosAgora < minIni) {
+      return {
+        estaAberto: false,
+        badgeTexto: `Fechado no Momento • Abre às ${horaIniFmt}`,
+        statusCor: "amber",
+      };
+    }
+
+    // Depois de fechar hoje
+    if (minutosAgora >= minFim) {
+      return {
+        estaAberto: false,
+        badgeTexto: "Fechado no Momento",
+        statusCor: "zinc",
+      };
+    }
+
+    // Intervalo de almoço
+    if (expHoje.intervalo_inicio && expHoje.intervalo_fim) {
+      const [hIntIni, mIntIni] = expHoje.intervalo_inicio.split(":").map(Number);
+      const [hIntFim, mIntFim] = expHoje.intervalo_fim.split(":").map(Number);
+      const minIntIni = hIntIni * 60 + (mIntIni || 0);
+      const minIntFim = hIntFim * 60 + (mIntFim || 0);
+      const horaRetorno = expHoje.intervalo_fim.slice(0, 5);
+
+      if (minutosAgora >= minIntIni && minutosAgora < minIntFim) {
+        return {
+          estaAberto: false,
+          badgeTexto: `Em Intervalo • Retorna às ${horaRetorno}`,
+          statusCor: "amber",
+        };
+      }
+    }
+
+    // Aberto agora
+    return {
+      estaAberto: true,
+      badgeTexto: `Aberto Agora • Até às ${horaFimFmt}`,
+      statusCor: "emerald",
+    };
+  };
+
+  const statusStudio = getStatusStudio();
+
   // Gerar opções dos próximos 7 dias
   const gerarProximosDias = () => {
     const dias = [];
@@ -172,7 +260,10 @@ export default function AgendarPage() {
       const isoData = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const nomeDia = i === 0 ? "Hoje" : i === 1 ? "Amanhã" : d.toLocaleDateString("pt-BR", { weekday: "short" });
       const diaNumero = d.getDate();
-      dias.push({ isoData, nomeDia, diaNumero });
+      const diaSemana = d.getDay();
+      const expDoDia = expediente.find((e) => e.dia_semana === diaSemana);
+      const estaFechado = expDoDia ? !expDoDia.ativo : false;
+      dias.push({ isoData, nomeDia, diaNumero, estaFechado });
     }
     return dias;
   };
@@ -192,10 +283,23 @@ export default function AgendarPage() {
               <h1 className="font-extrabold text-base text-zinc-100 tracking-tight leading-tight">
                 {config?.nome_barbearia || "Studio Malu Alves Beauty"}
               </h1>
-              <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Agendamento Online Aberto
-              </p>
+              {statusStudio.estaAberto ? (
+                <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{statusStudio.badgeTexto}</span>
+                </p>
+              ) : statusStudio.statusCor === "amber" ? (
+                <p className="text-[11px] text-amber-400 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span>{statusStudio.badgeTexto}</span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-zinc-400 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                  <span className="text-red-400 font-bold">{statusStudio.badgeTexto}</span>
+                  <span className="text-zinc-500 text-[10px] hidden xs:inline">• Agende horários futuros</span>
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -400,9 +504,11 @@ export default function AgendarPage() {
                       type="button"
                       onClick={() => setDataSelecionada(dia.isoData)}
                       className={cn(
-                        "flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all select-none",
+                        "flex flex-col items-center justify-center p-2 rounded-2xl border transition-all select-none relative",
                         isSelected
                           ? "bg-amber-500 text-zinc-950 border-amber-400 font-extrabold shadow-lg shadow-amber-500/25 scale-105"
+                          : dia.estaFechado
+                          ? "bg-zinc-950/70 border-zinc-800/60 text-zinc-500 hover:border-zinc-700 hover:bg-zinc-900/50"
                           : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-850"
                       )}
                     >
@@ -410,6 +516,14 @@ export default function AgendarPage() {
                         {dia.nomeDia}
                       </span>
                       <span className="text-base font-black mt-0.5">{dia.diaNumero}</span>
+                      {dia.estaFechado && (
+                        <span className={cn(
+                          "text-[8px] uppercase font-extrabold tracking-wider mt-0.5",
+                          isSelected ? "text-zinc-900" : "text-zinc-500"
+                        )}>
+                          Fechado
+                        </span>
+                      )}
                     </button>
                   );
                 })}
