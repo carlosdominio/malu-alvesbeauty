@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles, ArrowRight, DollarSign, Clock, Users } from "lucide-react";
+import { Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 export default function Home() {
@@ -29,7 +29,7 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <main className="max-w-3xl mx-auto px-4 py-12 text-center flex-1 flex flex-col justify-center">
+      <main className="max-w-3xl mx-auto px-4 py-16 text-center flex-1 flex flex-col justify-center">
         {/* Logo Central em Destaque */}
         <div className="mx-auto mb-6 flex flex-col items-center">
           <div className="relative">
@@ -63,7 +63,7 @@ export default function Home() {
           Agende seu design de sobrancelhas ou procedimento em menos de 1 minuto no Studio Malu Alves Beauty. Escolha o serviço, selecione o horário e receba a confirmação instantânea.
         </p>
 
-        {/* Botão de Ação Único (Sem botão de painel do dono) */}
+        {/* Botão de Ação Único */}
         <div className="mt-8 flex items-center justify-center">
           <Link href="/agendar" className="w-full sm:w-auto">
             <Button
@@ -75,33 +75,6 @@ export default function Home() {
               <ArrowRight className="w-5 h-5" />
             </Button>
           </Link>
-        </div>
-
-        {/* Benefícios Rápidos */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-14 text-left">
-          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
-            <Clock className="w-6 h-6 text-amber-400 mb-2" />
-            <h3 className="text-sm font-bold text-zinc-200">Horários em Tempo Real</h3>
-            <p className="text-xs text-zinc-500 mt-1">
-              Veja exatamente os horários livres hoje e nos próximos dias.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
-            <Users className="w-6 h-6 text-emerald-400 mb-2" />
-            <h3 className="text-sm font-bold text-zinc-200">Cliente Recorrente</h3>
-            <p className="text-xs text-zinc-500 mt-1">
-              Re-agende seu procedimento com apenas 1 clique ao abrir o link.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
-            <DollarSign className="w-6 h-6 text-amber-400 mb-2" />
-            <h3 className="text-sm font-bold text-zinc-200">Financeiro Enxuto</h3>
-            <p className="text-xs text-zinc-500 mt-1">
-              Controle de faturamento, tíquete médio e entradas por Pix e cartão.
-            </p>
-          </div>
         </div>
       </main>
 
