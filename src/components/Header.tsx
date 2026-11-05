@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Calendar, DollarSign, Users, Clock, Settings, MessageSquare, ExternalLink, LogOut } from "lucide-react";
+import { Sparkles, Calendar, DollarSign, Users, Clock, Settings, MessageSquare, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -73,12 +73,12 @@ export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = f
           {isAdmin ? (
             <div className="flex items-center gap-2">
               <Link
-                href="/agendar"
-                target="_blank"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+                href="/admin/config"
+                className="md:hidden flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-300 hover:text-amber-400 bg-zinc-900 border border-zinc-800 transition-colors"
+                title="Configurações"
               >
-                <span>Ver Link da Bio</span>
-                <ExternalLink className="w-3.5 h-3.5" />
+                <Settings className="w-3.5 h-3.5 text-amber-500" />
+                <span>Config</span>
               </Link>
               <button
                 type="button"
@@ -87,10 +87,11 @@ export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = f
                   document.cookie = "malu_admin_auth=; path=/; max-age=0";
                   window.location.href = "/admin/login";
                 }}
-                className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl border border-zinc-800 transition-colors"
                 title="Sair do Painel"
               >
                 <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs">Sair</span>
               </button>
             </div>
           ) : (
