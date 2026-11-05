@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "bot": "node whatsapp-server.js",
     "lint": "next lint"
   },
   "dependencies": {

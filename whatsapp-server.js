@@ -161,60 +161,33 @@ function calcularHorariosParaData(dataIso) {
   return horariosDisponiveis.slice(0, 8);
 }
 
-// Gravação de agendamento no Next.js
+// Gravação de agendamento no Next.js (Vercel ou Local)
 async function salvarAgendamentoNoPainel(dados) {
   try {
-    const postData = JSON.stringify(dados);
-    const req = http.request(
-      {
-        hostname: "127.0.0.1",
-        port: 3000,
-        path: "/api/agendamentos",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(postData),
-        },
-      },
-      (res) => {
-        console.log(`>>> [Sync Painel Admin] Status da gravação: ${res.statusCode}`);
-      }
-    );
-
-    req.on("error", (e) => {
-      console.error("Erro ao enviar agendamento para o Painel Admin:", e.message);
+    const appUrl = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
+    const res = await fetch(`${appUrl}/api/agendamentos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dados),
     });
-
-    req.write(postData);
-    req.end();
+    console.log(`>>> [Sync Painel Admin] Status da gravação: ${res.status}`);
   } catch (err) {
-    console.error("Erro ao sincronizar agendamento:", err);
+    console.error("Erro ao sincronizar agendamento:", err.message);
   }
 }
 
 // Cancelar agendamento ativo via API
 async function cancelarAgendamentoNoPainel(id) {
   try {
-    const postData = JSON.stringify({ id, status: "CANCELADO" });
-    const req = http.request(
-      {
-        hostname: "127.0.0.1",
-        port: 3000,
-        path: "/api/agendamentos",
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(postData),
-        },
-      },
-      (res) => {
-        console.log(`>>> [Cancelamento via Zap] Status: ${res.statusCode}`);
-      }
-    );
-    req.write(postData);
-    req.end();
+    const appUrl = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
+    const res = await fetch(`${appUrl}/api/agendamentos`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status: "CANCELADO" }),
+    });
+    console.log(`>>> [Cancelamento via Zap] Status: ${res.status}`);
   } catch (err) {
-    console.error("Erro ao cancelar agendamento:", err);
+    console.error("Erro ao cancelar agendamento:", err.message);
   }
 }
 
