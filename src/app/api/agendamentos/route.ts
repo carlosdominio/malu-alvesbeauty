@@ -35,7 +35,10 @@ export async function POST(req: Request) {
 
     // Se o agendamento veio do App/PWA ou Manual, dispara confirmação instantânea no WhatsApp!
     if (origem === "WEB" || origem === "MANUAL") {
-      const whatsappUrl = process.env.WHATSAPP_SERVER_URL || "http://127.0.0.1:3001";
+      const whatsappUrl =
+        process.env.WHATSAPP_SERVER_URL ||
+        process.env.NEXT_PUBLIC_WHATSAPP_SERVER_URL ||
+        "https://malu-alvesbeauty.onrender.com";
       fetch(`${whatsappUrl}/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

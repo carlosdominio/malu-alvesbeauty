@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const WHATSAPP_SERVER_URL = process.env.WHATSAPP_SERVER_URL || "http://127.0.0.1:3001";
+const WHATSAPP_SERVER_URL =
+  process.env.WHATSAPP_SERVER_URL ||
+  process.env.NEXT_PUBLIC_WHATSAPP_SERVER_URL ||
+  "https://malu-alvesbeauty.onrender.com";
 
 export async function GET() {
   try {
