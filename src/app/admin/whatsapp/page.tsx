@@ -69,11 +69,22 @@ export default function WhatsAppPage() {
     load();
   }, []);
 
-  // 2. Polling de status real do WhatsApp via API
+  // 2. Polling de status real do WhatsApp (tenta direto no Render ou via /api/whatsapp)
+  const getBotEndpoint = () => {
+    return process.env.NEXT_PUBLIC_WHATSAPP_SERVER_URL || "https://malu-alvesbeauty.onrender.com";
+  };
+
   const checarStatusWhatsApp = useCallback(async () => {
     try {
-      const res = await fetch("/api/whatsapp");
-      if (res.ok) {
+      // 1ª tentativa: direto no servidor do bot no Render
+      let res = await fetch(`${getBotEndpoint()}/status`, { cache: "no-store" }).catch(() => null);
+      
+      // 2ª tentativa: proxy local /api/whatsapp
+      if (!res || !res.ok) {
+        res = await fetch("/api/whatsapp", { cache: "no-store" }).catch(() => null);
+      }
+
+      if (res && res.ok) {
         const data = await res.json();
         setStatusConexao(data.status);
         setQrCodeBase64(data.qrCodeBase64);
@@ -94,11 +105,14 @@ export default function WhatsAppPage() {
   const handleIniciarConexao = async () => {
     setCarregandoAcao(true);
     try {
-      await fetch("/api/whatsapp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "START" }),
-      });
+      let res = await fetch(`${getBotEndpoint()}/start`, { method: "POST" }).catch(() => null);
+      if (!res || !res.ok) {
+        await fetch("/api/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "START" }),
+        });
+      }
       await checarStatusWhatsApp();
     } catch (err) {
       console.error(err);
@@ -111,11 +125,14 @@ export default function WhatsAppPage() {
   const handleDesconectar = async () => {
     setCarregandoAcao(true);
     try {
-      await fetch("/api/whatsapp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "DISCONNECT" }),
-      });
+      let res = await fetch(`${getBotEndpoint()}/disconnect`, { method: "POST" }).catch(() => null);
+      if (!res || !res.ok) {
+        await fetch("/api/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "DISCONNECT" }),
+        });
+      }
       await checarStatusWhatsApp();
     } catch (err) {
       console.error(err);
