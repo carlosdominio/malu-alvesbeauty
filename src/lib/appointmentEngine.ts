@@ -51,7 +51,7 @@ export function calcularSlotsDisponiveis({
     return {
       slots: [],
       aberto: false,
-      motivoFechado: "A barbearia não abre neste dia da semana.",
+      motivoFechado: "O studio não abre neste dia da semana.",
     };
   }
 

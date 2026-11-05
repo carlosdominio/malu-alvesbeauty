@@ -2,12 +2,12 @@ import { Agendamento, BarbeariaConfig, Cliente, ExpedienteDia, Servico } from "@
 
 export const configInicial: BarbeariaConfig = {
   id: "cfg-1",
-  nome_barbearia: "malu.alvesbeauty",
-  telefone_whatsapp: "11999998888",
+  nome_barbearia: "Studio Malu Alves Beauty",
+  telefone_whatsapp: "82994247688",
   tempo_buffer_minutos: 5,
   antecedencia_minima_cancelamento_horas: 2,
   limite_maximo_agendamentos_dia: 15,
-  mensagem_boas_vindas: "Bem-vindo ao malu.alvesbeauty! Agende seu horário em menos de 1 minuto.",
+  mensagem_boas_vindas: "Bem-vinda ao Studio Malu Alves Beauty! Agende seu horário em menos de 1 minuto.",
   chave_pix: "pix@malualvesbeauty.com.br",
 };
 
