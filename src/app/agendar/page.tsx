@@ -5,7 +5,7 @@ import confetti from "canvas-confetti";
 import {
   Calendar as CalendarIcon,
   Clock,
-  Scissors,
+  Sparkles,
   CheckCircle2,
   Phone,
   User,
@@ -184,9 +184,11 @@ export default function AgendarPage() {
       <header className="border-b border-zinc-800/80 bg-zinc-900/60 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-md mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-400 flex items-center justify-center text-zinc-950 font-black shadow-lg shadow-amber-500/20">
-              <Scissors className="w-5 h-5" />
-            </div>
+            <img
+              src="/logo.jpg"
+              alt="Logo Studio Malu Alves Beauty"
+              className="w-10 h-10 rounded-full object-cover border border-amber-500/40 shadow-md shadow-amber-500/20"
+            />
             <div>
               <h1 className="font-extrabold text-base text-zinc-100 tracking-tight leading-tight">
                 {config?.nome_barbearia || "Studio Malu Alves Beauty"}
@@ -359,7 +361,7 @@ export default function AgendarPage() {
                       </div>
 
                       <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center text-zinc-300 group-hover:bg-amber-500 group-hover:text-zinc-950 transition-all shrink-0 mt-1">
-                        <Scissors className="w-4 h-4" />
+                        <Sparkles className="w-4 h-4" />
                       </div>
                     </div>
                   </div>

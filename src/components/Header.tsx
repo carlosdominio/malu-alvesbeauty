@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Scissors, Calendar, DollarSign, Users, Clock, Settings, MessageSquare, ExternalLink } from "lucide-react";
+import { Sparkles, Calendar, DollarSign, Users, Clock, Settings, MessageSquare, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -17,7 +17,7 @@ export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = f
     { href: "/admin", label: "Agenda", icon: Calendar },
     { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
     { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign },
-    { href: "/admin/servicos", label: "Serviços", icon: Scissors },
+    { href: "/admin/servicos", label: "Serviços", icon: Sparkles },
     { href: "/admin/clientes", label: "Clientes", icon: Users },
     { href: "/admin/horarios", label: "Horários", icon: Clock },
     { href: "/admin/config", label: "Config", icon: Settings },
@@ -28,15 +28,17 @@ export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = f
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo / Brand */}
         <Link href={isAdmin ? "/admin" : "/"} className="flex items-center gap-2.5 group">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-zinc-950 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
-            <Scissors className="w-5 h-5 stroke-[2.5]" />
-          </div>
+          <img
+            src="/logo.jpg"
+            alt="Logo Studio Malu Alves Beauty"
+            className="w-10 h-10 rounded-full object-cover border border-amber-500/40 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform"
+          />
           <div>
             <h1 className="text-base font-extrabold tracking-tight text-zinc-100 group-hover:text-amber-400 transition-colors">
               {nomeBarbearia}
             </h1>
             <p className="text-[10px] uppercase font-bold tracking-widest text-amber-500">
-              {isAdmin ? "Painel de Controle" : "Agendamento Online"}
+              {isAdmin ? "Painel de Controle" : "Studio de Sobrancelhas"}
             </p>
           </div>
         </Link>

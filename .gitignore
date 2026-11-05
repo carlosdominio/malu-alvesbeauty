@@ -35,3 +35,5 @@ next-env.d.ts
 
 # whatsapp session credentials
 auth_info_baileys/
+*.Zone.Identifier
+856983982_*.jpg
