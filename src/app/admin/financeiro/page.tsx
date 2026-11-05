@@ -180,7 +180,7 @@ export default function FinanceiroPage() {
 
                     <div className="text-right">
                       <span className="font-black text-zinc-100">{formatarMoeda(s.total)}</span>
-                      <p className="text-[11px] text-zinc-400">{s.quantidade} cortes</p>
+                      <p className="text-[11px] text-zinc-400">{s.quantidade} {s.quantidade === 1 ? "atendimento" : "atendimentos"}</p>
                     </div>
                   </div>
                 ))}

@@ -225,7 +225,7 @@ export const ServerStore = {
         ag.forma_pagamento = formaPagamento;
       }
 
-      // Se concluiu o corte, atualiza histórico permanente e fidelidade do cliente!
+      // Se concluiu o atendimento, atualiza histórico permanente e fidelidade do cliente!
       if (status === "CONCLUIDO" && statusAnterior !== "CONCLUIDO") {
         const telLimpo = ag.cliente_telefone.replace(/\D/g, "");
         const clienteIdx = db.clientes.findIndex((c) => c.telefone.replace(/\D/g, "") === telLimpo);
@@ -244,7 +244,7 @@ export const ServerStore = {
             valor: ag.valor_cobrado,
             forma_pagamento: formaPagamento || "PIX",
           });
-          console.log(`>>> [Fidelidade] Cliente ${cli.nome} atingiu ${cli.total_visitas} cortes concluídos!`);
+          console.log(`>>> [Fidelidade] Cliente ${cli.nome} atingiu ${cli.total_visitas} atendimentos concluídos!`);
         }
       }
 

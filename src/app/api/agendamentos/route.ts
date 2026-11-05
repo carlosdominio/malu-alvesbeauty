@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ServerStore } from "@/lib/serverStore";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,20 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const dataFiltro = searchParams.get("data") || undefined;
+
+    if (isSupabaseConfigured && supabase) {
+      let query = supabase.from("agendamentos").select("*").order("horario_inicio", { ascending: true });
+      if (dataFiltro) {
+        query = query.gte("horario_inicio", `${dataFiltro}T00:00:00`).lte("horario_inicio", `${dataFiltro}T23:59:59`);
+      }
+      const { data, error } = await query;
+      if (!error && data) {
+        if (data.length > 0 || dataFiltro) {
+          return NextResponse.json(data);
+        }
+      }
+    }
+
     const agendamentos = ServerStore.getAgendamentos(dataFiltro);
     return NextResponse.json(agendamentos);
   } catch (error) {
@@ -24,7 +39,55 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Campos obrigatórios ausentes" }, { status: 400 });
     }
 
-    const novo = ServerStore.createAgendamento({
+    const [dataPart, horaPart] = horario_inicio.split("T");
+    let horarioFim = horario_inicio;
+    if (horaPart) {
+      const [h, m] = horaPart.slice(0, 5).split(":").map(Number);
+      const dur = Number(servico.duracao_minutos) || 30;
+      const totalMin = h * 60 + m + dur;
+      horarioFim = `${dataPart}T${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}:00`;
+    }
+
+    const telLimpo = cliente_telefone.replace(/\D/g, "");
+    const agendamentoId = `ag-${Date.now()}`;
+    const clienteId = `cli-${Date.now()}`;
+
+    const novo = {
+      id: agendamentoId,
+      cliente_id: clienteId,
+      cliente_nome,
+      cliente_telefone: telLimpo,
+      servico_id: servico.id,
+      servico_titulo: servico.titulo,
+      horario_inicio,
+      horario_fim: horarioFim,
+      duracao_minutos: servico.duracao_minutos || 30,
+      status: "CONFIRMADO",
+      origem,
+      valor_cobrado: servico.preco,
+      observacoes: observacoes || null,
+      created_at: new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from("clientes").upsert({
+          id: clienteId,
+          nome: cliente_nome,
+          telefone: telLimpo,
+          ultimo_servico_id: servico.id,
+          ultimo_servico_nome: servico.titulo,
+          ultima_visita: horario_inicio,
+          total_visitas: 1,
+        });
+
+        await supabase.from("agendamentos").insert(novo);
+      } catch (errDb) {
+        console.error("Erro ao persistir no Supabase:", errDb);
+      }
+    }
+
+    ServerStore.createAgendamento({
       cliente_nome,
       cliente_telefone,
       servico,
@@ -69,6 +132,15 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "ID e status são obrigatórios" }, { status: 400 });
     }
 
+    if (isSupabaseConfigured && supabase) {
+      const updateData: Record<string, unknown> = { status };
+      if (forma_pagamento) updateData.forma_pagamento = forma_pagamento;
+      const { error } = await supabase.from("agendamentos").update(updateData).eq("id", id);
+      if (error) {
+        console.error("Erro ao atualizar agendamento no Supabase:", error);
+      }
+    }
+
     ServerStore.updateStatusAgendamento(id, status, forma_pagamento);
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -81,6 +153,15 @@ export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const modo = (searchParams.get("modo") as "TODOS" | "CANCELADOS" | "TESTES") || "TODOS";
+
+    if (isSupabaseConfigured && supabase) {
+      if (modo === "CANCELADOS") {
+        await supabase.from("agendamentos").delete().or("status.eq.CANCELADO,status.eq.FALTOU");
+      } else {
+        await supabase.from("agendamentos").delete().neq("id", "none");
+      }
+    }
+
     const removidos = ServerStore.limparAgendamentos(modo);
     return NextResponse.json({ success: true, removidos });
   } catch (error) {

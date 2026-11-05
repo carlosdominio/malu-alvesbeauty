@@ -60,7 +60,7 @@ class WhatsAppBotService {
         auth: state,
         logger,
         printQRInTerminal: true,
-        browser: ["BarberOS", "Chrome", "1.0.0"],
+        browser: ["Studio Malu Alves Beauty", "Chrome", "1.0.0"],
       });
 
       this.sock.ev.on("creds.update", saveCreds);
@@ -179,7 +179,10 @@ class WhatsAppBotService {
         lower.includes("1") ||
         lower.includes("agendar") ||
         lower.includes("marcar") ||
-        lower.includes("corte") ||
+        lower.includes("sobrancelha") ||
+        lower.includes("design") ||
+        lower.includes("atendimento") ||
+        lower.includes("horário") ||
         lower.includes("horario") ||
         lower.includes("horário")
       ) {

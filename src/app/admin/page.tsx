@@ -122,13 +122,24 @@ export default function AgendaPage() {
     novoStatus: StatusAgendamento,
     forma?: FormaPagamento
   ) => {
+    // Atualização otimista imediata na interface
+    setAgendamentos((prev) =>
+      prev.map((a) =>
+        a.id === id ? { ...a, status: novoStatus, forma_pagamento: forma || a.forma_pagamento } : a
+      )
+    );
+
     const ag = agendamentos.find((a) => a.id === id);
 
-    await fetch("/api/agendamentos", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status: novoStatus, forma_pagamento: forma }),
-    });
+    try {
+      await fetch("/api/agendamentos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: novoStatus, forma_pagamento: forma }),
+      });
+    } catch (err) {
+      console.error("Erro ao atualizar status:", err);
+    }
 
     carregarDados(true);
 
@@ -181,6 +192,11 @@ export default function AgendaPage() {
         toastInfo(
           "Cliente Faltou",
           `Mensagem amigável de remarcação enviada no WhatsApp de ${ag.cliente_nome}.`
+        );
+      } else if (novoStatus === "CONFIRMADO") {
+        toastSuccess(
+          "Agendamento Reaberto",
+          `Agendamento de ${ag.cliente_nome} retornado para a fila de atendimento.`
         );
       }
     }
@@ -278,7 +294,7 @@ export default function AgendaPage() {
             )}
           </div>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Gerencie sua fila de atendimento, conclua cortes e acompanhe em tempo real.
+            Gerencie sua fila de atendimento, conclua atendimentos e acompanhe em tempo real.
           </p>
         </div>
 
@@ -349,7 +365,7 @@ export default function AgendaPage() {
               Lotação do Dia:
             </span>
             <span className={cn("font-black", diaLotado ? "text-red-400" : "text-zinc-200")}>
-              {totalAgendados} / {limiteMaximo} cortes
+              {totalAgendados} / {limiteMaximo} atendimentos
             </span>
           </div>
           <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
@@ -543,12 +559,12 @@ export default function AgendaPage() {
                       {mereceDesconto && (
                         <Badge variant="gold" className="text-[10px] flex items-center gap-1 font-bold animate-pulse">
                           <Award className="w-3 h-3 text-amber-400" />
-                          🎯 5º Corte (Desconto Fidelidade!)
+                          🎯 5º Atendimento (Desconto Fidelidade!)
                         </Badge>
                       )}
                       {!mereceDesconto && clienteFiel && (
                         <Badge variant="gold" className="text-[10px] flex items-center gap-1 font-semibold">
-                          ⭐ Cliente Fiel ({totalVisitas} cortes)
+                          ⭐ Cliente Fiel ({totalVisitas} atendimentos)
                         </Badge>
                       )}
 
@@ -558,7 +574,7 @@ export default function AgendaPage() {
                           Via WhatsApp
                         </Badge>
                       )}
-                      {ag.status === "CONFIRMADO" && <Badge variant="warning">Aguardando Corte</Badge>}
+                      {ag.status === "CONFIRMADO" && <Badge variant="warning">Aguardando Atendimento</Badge>}
                       {ag.status === "CONCLUIDO" && (
                         <Badge variant="success">
                           Concluído • {ag.forma_pagamento || "Pago"}

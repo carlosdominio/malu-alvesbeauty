@@ -204,7 +204,7 @@ export default function ConfigPage() {
             <option value="0">Desativado (Manter tudo no banco de dados)</option>
           </select>
           <p className="text-[11px] text-zinc-400 mt-1">
-            O sistema limpa da agenda os cancelamentos e faltas mais antigos que esse prazo automaticamente, sem apagar o histórico de cortes nem os pontos de fidelidade dos clientes.
+            O sistema limpa da agenda os cancelamentos e faltas mais antigos que esse prazo automaticamente, sem apagar o histórico de atendimentos nem os pontos de fidelidade dos clientes.
           </p>
         </div>
 

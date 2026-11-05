@@ -523,7 +523,7 @@ async function startWhatsApp() {
       auth: state,
       logger,
       printQRInTerminal: false,
-      browser: ["BarberOS", "Chrome", "1.0.0"],
+      browser: ["Studio Malu Alves Beauty", "Chrome", "1.0.0"],
     });
 
     sock.ev.on("creds.update", saveCreds);

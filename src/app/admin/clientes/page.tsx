@@ -5,7 +5,6 @@ import {
   Users,
   Search,
   MessageCircle,
-  Scissors,
   Award,
   DollarSign,
   Calendar,
@@ -161,11 +160,11 @@ export default function ClientesPage() {
                 <div className="p-3 rounded-xl bg-zinc-950/80 border border-zinc-800/80 space-y-2">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-zinc-400 font-semibold flex items-center gap-1">
-                      <Scissors className="w-3 h-3 text-amber-400" />
+                      <Sparkles className="w-3 h-3 text-amber-400" />
                       Cartão Fidelidade:
                     </span>
                     <span className="font-bold text-zinc-200">
-                      {visitas} {visitas === 1 ? "corte realizado" : "cortes realizados"}
+                      {visitas} {visitas === 1 ? "atendimento realizado" : "atendimentos realizados"}
                     </span>
                   </div>
 
@@ -197,7 +196,7 @@ export default function ClientesPage() {
                 <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1 border-t border-zinc-800/60">
                   <span className="flex items-center gap-1">
                     <Calendar className="w-3 h-3 text-zinc-500" />
-                    Último corte:{" "}
+                    Último atendimento:{" "}
                     <strong className="text-zinc-300">
                       {cliente.ultima_visita ? formatarDataHora(cliente.ultima_visita) : "Hoje"}
                     </strong>

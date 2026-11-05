@@ -9,7 +9,7 @@ export interface BarbeariaConfig {
   limite_maximo_agendamentos_dia: number;
   mensagem_boas_vindas?: string;
   chave_pix?: string;
-  regra_fidelidade_cortes?: number; // Ex: A cada 5 cortes ganha desconto
+  regra_fidelidade_cortes?: number; // Ex: A cada 5 atendimentos ganha desconto
   porcentagem_desconto_fidelidade?: number; // Ex: 20%
   auto_limpeza_cancelados_dias?: number; // 0 = Desativado, 7, 15, 30, 60 dias
 }

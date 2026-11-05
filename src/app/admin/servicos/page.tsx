@@ -81,7 +81,7 @@ export default function ServicosPage() {
         <div>
           <h2 className="text-2xl font-black text-zinc-100">Catálogo de Serviços</h2>
           <p className="text-xs text-zinc-400">
-            Cadastre os cortes, barbas, combos e defina preços e duração.
+            Cadastre os serviços de design de sobrancelhas, procedimentos e defina preços e duração.
           </p>
         </div>
 
@@ -186,7 +186,7 @@ export default function ServicosPage() {
               required
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Ex: Corte Degradê Navalhado"
+              placeholder="Ex: Design com Henna"
               className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
             />
           </div>
@@ -197,7 +197,7 @@ export default function ServicosPage() {
               rows={2}
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Ex: Finalizado com toalha quente e pomada matte."
+              placeholder="Ex: Alinhamento visagista com aplicação de henna para realce."
               className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
             />
           </div>

@@ -6,52 +6,46 @@
     "tempo_buffer_minutos": 5,
     "antecedencia_minima_cancelamento_horas": 2,
     "limite_maximo_agendamentos_dia": 15,
-    "mensagem_boas_vindas": "Bem-vinda ao Studio Malu Alves Beauty! Agende seu horário em menos de 1 minuto.",
-    "chave_pix": "pix@malualvesbeauty.com.br"
+    "mensagem_boas_vindas": "Bem-vinda ao Studio Malu Alves Beauty! Agende seu horário com praticidade.",
+    "chave_pix": "pix@malualvesbeauty.com.br",
+    "regra_fidelidade_cortes": 5,
+    "porcentagem_desconto_fidelidade": 20,
+    "auto_limpeza_cancelados_dias": 7
   },
   "servicos": [
     {
       "id": "serv-1",
-      "titulo": "Corte Degradê / Social",
-      "descricao": "Corte moderno na máquina e tesoura, com acabamento na navalha e finalização com pomada.",
-      "preco": 35,
+      "titulo": "Design de Sobrancelhas Simples",
+      "descricao": "Alinhamento com pinça, medição visagista e acabamento perfeito.",
+      "preco": 30,
       "duracao_minutos": 30,
       "ativo": true,
-      "icone": "scissors"
+      "icone": "sparkles"
     },
     {
       "id": "serv-2",
-      "titulo": "Barba Terapia Completa",
-      "descricao": "Toalha quente, alinhamento na navalha, esfoliação, massagem e óleo hidratante.",
-      "preco": 25,
-      "duracao_minutos": 25,
+      "titulo": "Design com Henna",
+      "descricao": "Design personalizado com aplicação de henna para realce e preenchimento.",
+      "preco": 45,
+      "duracao_minutos": 45,
       "ativo": true,
       "icone": "sparkles"
     },
     {
       "id": "serv-3",
-      "titulo": "Combo Corte + Barba",
-      "descricao": "O pacote completo para sair impecável. Cabelo + barba terapia completa.",
-      "preco": 50,
+      "titulo": "Brow Lamination",
+      "descricao": "Alinhamento dos fios rebeldes das sobrancelhas deixando visual encorpado e moderno.",
+      "preco": 80,
       "duracao_minutos": 50,
       "ativo": true,
-      "icone": "flame"
+      "icone": "sparkles"
     },
     {
       "id": "serv-4",
-      "titulo": "Sobrancelha na Navalha",
-      "descricao": "Alinhamento e limpeza precisa do contorno das sobrancelhas.",
-      "preco": 15,
-      "duracao_minutos": 10,
-      "ativo": true,
-      "icone": "scissors"
-    },
-    {
-      "id": "serv-5",
-      "titulo": "Pigmentação Cabelo / Barba",
-      "descricao": "Preenchimento de falhas e destaque no alinhamento do corte.",
+      "titulo": "Epilação Facial / Buço",
+      "descricao": "Remoção delicada dos pelos faciais com acabamento suave.",
       "preco": 20,
-      "duracao_minutos": 20,
+      "duracao_minutos": 15,
       "ativo": true,
       "icone": "sparkles"
     }
@@ -125,113 +119,29 @@
       "cliente_id": "cli-1787340520735",
       "cliente_nome": "Carlos Leonidio",
       "cliente_telefone": "115328914817201",
-      "servico_id": "serv-3",
-      "servico_titulo": "Combo Corte + Barba",
+      "servico_id": "serv-2",
+      "servico_titulo": "Design com Henna",
       "horario_inicio": "2026-11-05T15:30:00",
-      "horario_fim": "2026-11-05T16:20:00",
-      "duracao_minutos": 50,
+      "horario_fim": "2026-11-05T16:15:00",
+      "duracao_minutos": 45,
       "status": "CONFIRMADO",
       "origem": "WHATSAPP",
-      "valor_cobrado": 50,
+      "valor_cobrado": 45,
       "created_at": "2026-11-05T16:29:58.004Z"
     }
   ],
   "clientes": [
     {
-      "id": "cli-1",
-      "nome": "Marcos Vinicius",
-      "telefone": "11987654321",
-      "ultimo_servico_id": "serv-1",
-      "ultimo_servico_nome": "Corte Degradê / Social",
-      "ultima_visita": "2026-08-21T09:30:00",
-      "total_visitas": 8,
-      "created_at": "2026-06-10T10:00:00Z",
-      "total_gasto": 70,
-      "historico_visitas": [
-        {
-          "agendamento_id": "ag-1",
-          "data_hora": "2026-08-21T09:30:00",
-          "servico_titulo": "Corte Degradê / Social",
-          "valor": 35,
-          "forma_pagamento": "DINHEIRO"
-        },
-        {
-          "agendamento_id": "ag-1",
-          "data_hora": "2026-08-21T09:30:00",
-          "servico_titulo": "Corte Degradê / Social",
-          "valor": 35,
-          "forma_pagamento": "DINHEIRO"
-        }
-      ]
-    },
-    {
-      "id": "cli-2",
-      "nome": "Lucas Ferreira",
-      "telefone": "11977778888",
-      "ultimo_servico_id": "serv-3",
-      "ultimo_servico_nome": "Combo Corte + Barba",
-      "ultima_visita": "2026-08-21T10:30:00",
-      "total_visitas": 4,
-      "created_at": "2026-07-01T14:00:00Z"
-    },
-    {
-      "id": "cli-1787340382934",
-      "nome": "CARLOS HENRIQUE",
-      "telefone": "82994247688",
-      "ultimo_servico_id": "serv-1",
-      "ultimo_servico_nome": "Corte Degradê / Social",
-      "ultima_visita": "2026-08-22T10:15:00",
-      "total_visitas": 2,
-      "created_at": "2026-08-21T19:26:22.934Z",
-      "total_gasto": 35,
-      "historico_visitas": [
-        {
-          "agendamento_id": "ag-1787350821942",
-          "data_hora": "2026-08-22T08:30:00",
-          "servico_titulo": "Corte Degradê / Social",
-          "valor": 35,
-          "forma_pagamento": "DINHEIRO"
-        }
-      ]
-    },
-    {
       "id": "cli-1787340520735",
       "nome": "Carlos Leonidio",
       "telefone": "115328914817201",
-      "ultimo_servico_id": "serv-3",
-      "ultimo_servico_nome": "Combo Corte + Barba",
+      "ultimo_servico_id": "serv-2",
+      "ultimo_servico_nome": "Design com Henna",
       "ultima_visita": "2026-11-05T15:30:00",
       "total_visitas": 3,
-      "created_at": "2026-08-21T19:28:40.735Z",
-      "total_gasto": 85,
-      "historico_visitas": [
-        {
-          "agendamento_id": "ag-1787342359419",
-          "data_hora": "2026-08-21T19:00:00",
-          "servico_titulo": "Corte Degradê / Social",
-          "valor": 35,
-          "forma_pagamento": "DINHEIRO"
-        },
-        {
-          "agendamento_id": "ag-1787343287829",
-          "data_hora": "2026-08-21T17:30:00",
-          "servico_titulo": "Combo Corte + Barba",
-          "valor": 50,
-          "forma_pagamento": "PIX"
-        }
-      ]
-    },
-    {
-      "id": "cli-1787352010970",
-      "nome": "Carlos ",
-      "telefone": "082994247688",
-      "ultimo_servico_id": "serv-1",
-      "ultimo_servico_nome": "Corte Degradê / Social",
-      "ultima_visita": "2026-08-22T09:00:00",
-      "total_visitas": 0,
-      "total_gasto": 0,
+      "total_gasto": 90,
       "historico_visitas": [],
-      "created_at": "2026-08-21T22:40:10.971Z"
+      "created_at": "2026-11-05T16:29:58.004Z"
     }
   ],
   "bloqueios": []
