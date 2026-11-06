@@ -36,8 +36,8 @@ export default function AgendaPage() {
   const [config, setConfig] = useState<BarbeariaConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Aba de Filtro da Agenda (Padrão: PENDENTES para foco na fila de espera)
-  const [abaAtiva, setAbaAtiva] = useState<FiltroAba>("PENDENTES");
+  // Aba de Filtro da Agenda (Padrão: AGUARDANDO_SINAL para foco imediato nas pré-reservas)
+  const [abaAtiva, setAbaAtiva] = useState<FiltroAba>("AGUARDANDO_SINAL");
 
   const { toastSuccess, toastWarning, toastInfo } = useToast();
 
