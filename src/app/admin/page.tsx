@@ -1134,7 +1134,7 @@ export default function AgendaPage() {
         description="Cadastre um atendimento presencial ou agendado por telefone"
         icon={<Plus className="w-5 h-5 text-amber-500" />}
       >
-        <form onSubmit={handleCriarAgendamentoManual} className="space-y-4">
+        <form onSubmit={handleCriarAgendamentoManual} className="space-y-3">
           <div>
             <label className="text-xs font-bold text-zinc-300 block mb-1">Nome do Cliente</label>
             <input
@@ -1143,7 +1143,7 @@ export default function AgendaPage() {
               value={novoNome}
               onChange={(e) => setNovoNome(e.target.value)}
               placeholder="Ex: João Silva"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
             />
           </div>
 
@@ -1155,17 +1155,17 @@ export default function AgendaPage() {
               value={novoTelefone}
               onChange={(e) => setNovoTelefone(e.target.value)}
               placeholder="Ex: 82994247688"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             <div>
               <label className="text-xs font-bold text-zinc-300 block mb-1">Serviço</label>
               <select
                 value={novoServicoId}
                 onChange={(e) => setNovoServicoId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+                className="w-full px-2.5 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs sm:text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
               >
                 {servicos.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -1182,14 +1182,14 @@ export default function AgendaPage() {
                 required
                 value={novoHorario}
                 onChange={(e) => setNovoHorario(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+                className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
               />
             </div>
           </div>
 
           {/* Forma de Pagamento */}
           <div>
-            <label className="text-xs font-bold text-zinc-300 block mb-2">Forma de Pagamento</label>
+            <label className="text-xs font-bold text-zinc-300 block mb-1.5">Forma de Pagamento</label>
             <div className="grid grid-cols-3 gap-2">
               {(
                 [
@@ -1211,7 +1211,7 @@ export default function AgendaPage() {
                       }
                     }}
                     className={cn(
-                      "py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 select-none",
+                      "py-2 px-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 select-none",
                       isSel
                         ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/20 font-black"
                         : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-850"
@@ -1225,9 +1225,9 @@ export default function AgendaPage() {
             </div>
           </div>
 
-          {/* Opção de Troco para Dinheiro */}
+          {/* Opção de Troco para Dinheiro (Compacta e Otimizada) */}
           {novoFormaPagamento === "DINHEIRO" && (
-            <div className="p-3.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 space-y-3 animate-in fade-in duration-200">
+            <div className="p-3 rounded-2xl bg-zinc-950/90 border border-zinc-800 space-y-2.5 animate-in fade-in duration-200">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
@@ -1255,83 +1255,77 @@ export default function AgendaPage() {
               </div>
 
               {novoPrecisaTroco && (
-                <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
-                  <label className="text-xs font-bold text-zinc-300 block">
-                    Troco para quanto? (R$)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">
-                      R$
-                    </span>
-                    <input
-                      type="number"
-                      step="any"
-                      min={precoCobradoManual}
-                      placeholder={String(Math.ceil((precoCobradoManual + 10) / 10) * 10 || 50)}
-                      value={novoTrocoPara}
-                      onChange={(e) => setNovoTrocoPara(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 font-bold focus:outline-none focus:border-amber-500"
-                      required={novoPrecisaTroco}
-                    />
-                  </div>
-
-                  {/* Atalhos de Cédulas */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[11px] text-zinc-400">Sugestões:</span>
-                    {[20, 50, 100, 200]
-                      .filter((val) => val >= precoCobradoManual)
-                      .map((val) => (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={() => setNovoTrocoPara(String(val))}
-                          className={cn(
-                            "px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors",
-                            novoTrocoPara === String(val)
-                              ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                              : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                          )}
-                        >
-                          R$ {val}
-                        </button>
-                      ))}
-                  </div>
-
-                  {/* Badge de Cálculo em Tempo Real */}
-                  {valorTrocoParaNum > 0 && (
-                    <div
-                      className={cn(
-                        "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between transition-all",
-                        trocoInsuficiente
-                          ? "bg-red-500/10 border-red-500/30 text-red-300"
-                          : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                      )}
-                    >
-                      {trocoInsuficiente ? (
-                        <span>
-                          ⚠️ Valor menor que o serviço ({formatarMoeda(precoCobradoManual)})
-                        </span>
-                      ) : (
-                        <>
-                          <span className="flex items-center gap-1">
-                            <span>💵</span>
-                            <span>Troco a devolver:</span>
-                          </span>
-                          <span className="text-sm font-black text-emerald-400">
-                            {formatarMoeda(valorTrocoCalculado)}
-                          </span>
-                        </>
-                      )}
+                <div className="space-y-2 pt-2 border-t border-zinc-800/80">
+                  <div className="flex items-center justify-between gap-1">
+                    <label className="text-xs font-bold text-zinc-300">
+                      Troco para quanto?
+                    </label>
+                    {/* Atalhos Rápidos de Cédulas alinhados ao lado do label */}
+                    <div className="flex items-center gap-1">
+                      {[20, 50, 100, 200]
+                        .filter((val) => val >= precoCobradoManual)
+                        .map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setNovoTrocoPara(String(val))}
+                            className={cn(
+                              "px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors",
+                              novoTrocoPara === String(val)
+                                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                            )}
+                          >
+                            R$ {val}
+                          </button>
+                        ))}
                     </div>
+                  </div>
+
+                  {/* Input de Valor + Badge de Devolução Compacto Lado a Lado */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">
+                        R$
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        min={precoCobradoManual}
+                        placeholder={String(Math.ceil((precoCobradoManual + 10) / 10) * 10 || 50)}
+                        value={novoTrocoPara}
+                        onChange={(e) => setNovoTrocoPara(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 font-bold focus:outline-none focus:border-amber-500"
+                        required={novoPrecisaTroco}
+                      />
+                    </div>
+
+                    {valorTrocoParaNum > 0 && !trocoInsuficiente && (
+                      <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-extrabold shrink-0 text-center flex flex-col justify-center">
+                        <span className="text-[10px] text-emerald-400/80 uppercase tracking-wider font-semibold">Devolver</span>
+                        <span className="text-sm font-black text-emerald-400 leading-tight">
+                          {formatarMoeda(valorTrocoCalculado)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {trocoInsuficiente && (
+                    <p className="text-[11px] text-red-400 font-bold">
+                      ⚠️ Menor que o serviço ({formatarMoeda(precoCobradoManual)})
+                    </p>
                   )}
                 </div>
               )}
             </div>
           )}
 
-          <Button type="submit" variant="gold" size="lg" className="w-full font-bold">
-            Adicionar na Agenda
-          </Button>
+          {/* Botão de Ação Sticky (Sempre Visível no Rodapé sem precisar rolar) */}
+          <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 p-3 sm:p-4 bg-zinc-900/95 backdrop-blur-md border-t border-zinc-800 flex items-center justify-end z-20 mt-3 rounded-b-3xl">
+            <Button type="submit" variant="gold" size="lg" className="w-full font-bold shadow-lg shadow-amber-500/20 py-2.5 sm:py-3">
+              Adicionar na Agenda
+            </Button>
+          </div>
         </form>
       </Modal>
     </div>

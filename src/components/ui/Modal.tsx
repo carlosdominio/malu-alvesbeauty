@@ -44,7 +44,7 @@ export function Modal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto overflow-x-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto overflow-x-hidden">
       {/* Backdrop com blur sofisticado */}
       <div
         className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity animate-in fade-in duration-200"
@@ -54,7 +54,7 @@ export function Modal({
       {/* Caixa do Diálogo com Brilho Superior e Bordas Arredondadas */}
       <div
         className={cn(
-          "relative w-full bg-zinc-900/95 border border-zinc-800 rounded-3xl p-6 sm:p-7 shadow-2xl shadow-black/90 z-10 max-h-[92vh] overflow-y-auto overflow-x-hidden animate-in fade-in zoom-in-95 duration-200",
+          "relative w-full bg-zinc-900/95 border border-zinc-800 rounded-3xl p-4 sm:p-6 shadow-2xl shadow-black/90 z-10 max-h-[92vh] overflow-y-auto overflow-x-hidden animate-in fade-in zoom-in-95 duration-200",
           maxWidthClasses[maxWidth]
         )}
       >
@@ -65,10 +65,10 @@ export function Modal({
         </div>
 
         {/* Cabeçalho do Modal */}
-        <div className="flex items-start justify-between gap-3 pb-4 border-b border-zinc-800/80 relative">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-start justify-between gap-3 pb-3 sm:pb-4 border-b border-zinc-800/80 relative">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             {icon && (
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/20">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/20">
                 {icon}
               </div>
             )}
@@ -77,7 +77,7 @@ export function Modal({
                 {title}
               </h3>
               {description && (
-                <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                <p className="text-xs text-zinc-400 mt-0.5 leading-snug sm:leading-relaxed">
                   {description}
                 </p>
               )}
@@ -94,7 +94,7 @@ export function Modal({
         </div>
 
         {/* Conteúdo */}
-        <div className="pt-4 relative">{children}</div>
+        <div className="pt-3 sm:pt-4 relative">{children}</div>
       </div>
     </div>
   );
