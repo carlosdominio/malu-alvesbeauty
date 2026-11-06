@@ -303,6 +303,20 @@ export const DataStore = {
     }
   },
 
+  async limparHistoricoFinanceiro(periodo: "HOJE" | "SEMANA" | "MES" | "TODOS" = "TODOS"): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/financeiro?periodo=${periodo}`, { method: "DELETE" });
+      if (res.ok) {
+        // Atualizar lista de agendamentos no cache local
+        await this.getAgendamentos();
+        return true;
+      }
+    } catch (e) {
+      console.error("Erro ao limpar histórico financeiro via API:", e);
+    }
+    return false;
+  },
+
   // 6. AGENDAMENTOS
   async getAgendamentos(dataFiltro?: string): Promise<Agendamento[]> {
     if (typeof window !== "undefined") {

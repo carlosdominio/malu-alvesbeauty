@@ -38,6 +38,7 @@ export interface BarbeariaConfig {
   regra_fidelidade_cortes?: number; // Ex: A cada 5 atendimentos ganha desconto
   porcentagem_desconto_fidelidade?: number; // Ex: 20%
   auto_limpeza_cancelados_dias?: number; // 0 = Desativado, 7, 15, 30, 60 dias
+  auto_limpeza_incluir_historico?: boolean; // Se true, limpa também histórico de atendimentos/financeiro antigos
   admin_usuario?: string;
   admin_senha?: string;
   mensagens_zap?: MensagensWhatsAppConfig;

@@ -118,6 +118,7 @@ export const ServerStore = {
   executarAutoLimpeza(dbParam?: DBData): boolean {
     const dados = dbParam || readDB();
     const diasLimite = dados.config.auto_limpeza_cancelados_dias ?? 7; // Padrão: 7 dias
+    const incluirHistorico = dados.config.auto_limpeza_incluir_historico ?? false;
 
     if (diasLimite <= 0) return false;
 
@@ -127,15 +128,37 @@ export const ServerStore = {
 
     const totalAntes = dados.agendamentos.length;
     dados.agendamentos = dados.agendamentos.filter((ag) => {
-      const ehCanceladoOuFalta = ag.status === "CANCELADO" || ag.status === "FALTOU";
-      if (!ehCanceladoOuFalta) return true;
       const dataAg = ag.horario_inicio.split("T")[0];
-      return dataAg >= dataLimiteIso;
+      const ehAntigo = dataAg < dataLimiteIso;
+
+      // 1. Limpar cancelamentos e faltas mais antigos que o prazo configurado
+      if (ag.status === "CANCELADO" || ag.status === "FALTOU") {
+        return !ehAntigo;
+      }
+
+      // 2. Se a configuração de incluir histórico estiver ativa, limpa também atendimentos concluídos antigos
+      if (incluirHistorico && ag.status === "CONCLUIDO") {
+        return !ehAntigo;
+      }
+
+      return true;
     });
+
+    // Se incluir histórico, limpa também visitas antigas do histórico dos clientes
+    if (incluirHistorico && dados.clientes) {
+      dados.clientes.forEach((cli) => {
+        if (cli.historico_visitas && cli.historico_visitas.length > 0) {
+          cli.historico_visitas = cli.historico_visitas.filter((h) => {
+            const dataH = h.data_hora.split("T")[0];
+            return dataH >= dataLimiteIso;
+          });
+        }
+      });
+    }
 
     if (dados.agendamentos.length !== totalAntes) {
       writeDB(dados);
-      console.log(`>>> [Auto-Limpeza] ${totalAntes - dados.agendamentos.length} cancelamentos/faltas antigos foram limpos automaticamente.`);
+      console.log(`>>> [Auto-Limpeza] ${totalAntes - dados.agendamentos.length} registros antigos (cancelamentos/faltas${incluirHistorico ? " e histórico" : ""}) foram limpos automaticamente.`);
       return true;
     }
     return false;
@@ -310,5 +333,51 @@ export const ServerStore = {
     writeDB(db);
     console.log(`>>> [ServerStore] Limpeza de clientes: ${totalAnterior} clientes removidos.`);
     return totalAnterior;
+  },
+
+  limparHistoricoFinanceiro(periodo: "HOJE" | "SEMANA" | "MES" | "TODOS" = "TODOS"): number {
+    const db = readDB();
+    const agora = new Date();
+    const hojeStr = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
+
+    const totalAntes = db.agendamentos.length;
+
+    db.agendamentos = db.agendamentos.filter((ag) => {
+      // Agendamentos em aberto (Aguardando sinal, confirmados na fila) NÃO são tocados!
+      if (ag.status !== "CONCLUIDO") return true;
+
+      const dataAg = ag.horario_inicio.split("T")[0];
+
+      if (periodo === "HOJE") {
+        return dataAg !== hojeStr;
+      }
+
+      if (periodo === "SEMANA") {
+        const dataObj = new Date(ag.horario_inicio);
+        const diffTime = Math.abs(agora.getTime() - dataObj.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays > 7;
+      }
+
+      if (periodo === "MES") {
+        return !dataAg.startsWith(hojeStr.slice(0, 7));
+      }
+
+      // Se "TODOS", remove todos os concluídos
+      return false;
+    });
+
+    // Se limpar todos, zera também total_gasto e historico_visitas nos clientes
+    if (periodo === "TODOS" && db.clientes) {
+      db.clientes.forEach((cli) => {
+        cli.total_gasto = 0;
+        cli.historico_visitas = [];
+      });
+    }
+
+    writeDB(db);
+    const removidos = totalAntes - db.agendamentos.length;
+    console.log(`>>> [ServerStore] Histórico financeiro limpo (${periodo}): ${removidos} registros de faturamento removidos.`);
+    return removidos;
   },
 };

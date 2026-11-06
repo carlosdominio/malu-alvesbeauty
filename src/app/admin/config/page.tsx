@@ -434,26 +434,53 @@ Para confirmar com exclusividade o seu atendimento, solicitamos um sinal de:
         </div>
 
         {/* Limpeza Automática Inteligente */}
-        <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-amber-400 block mb-1.5">
-            Auto-Limpeza Automática de Cancelamentos & Faltas
-          </label>
-          <select
-            value={config.auto_limpeza_cancelados_dias ?? 7}
-            onChange={(e) =>
-              setConfig({ ...config, auto_limpeza_cancelados_dias: parseInt(e.target.value, 10) })
-            }
-            className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-semibold"
-          >
-            <option value="7">A cada 7 dias (Recomendado - Remove faltas/cancelamentos antigos)</option>
-            <option value="15">A cada 15 dias</option>
-            <option value="30">A cada 30 dias (Mensal)</option>
-            <option value="60">A cada 60 dias</option>
-            <option value="0">Desativado (Manter tudo no banco de dados)</option>
-          </select>
-          <p className="text-[11px] text-zinc-400 mt-1">
-            O sistema limpa da agenda os cancelamentos e faltas mais antigos que esse prazo automaticamente, sem apagar o histórico de atendimentos nem os pontos de fidelidade dos clientes.
-          </p>
+        <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/80 space-y-3">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-amber-400 block mb-1.5">
+              Auto-Limpeza Automática de Cancelamentos & Faltas
+            </label>
+            <select
+              value={config.auto_limpeza_cancelados_dias ?? 7}
+              onChange={(e) =>
+                setConfig({ ...config, auto_limpeza_cancelados_dias: parseInt(e.target.value, 10) })
+              }
+              className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-semibold"
+            >
+              <option value="7">A cada 7 dias (Recomendado - Remove faltas/cancelamentos antigos)</option>
+              <option value="15">A cada 15 dias</option>
+              <option value="30">A cada 30 dias (Mensal)</option>
+              <option value="60">A cada 60 dias</option>
+              <option value="0">Desativado (Manter tudo no banco de dados)</option>
+            </select>
+            <p className="text-[11px] text-zinc-400 mt-1.5">
+              {config.auto_limpeza_incluir_historico
+                ? "O sistema limpa da agenda os cancelamentos, faltas e também os atendimentos concluídos mais antigos que esse prazo automaticamente."
+                : "O sistema limpa da agenda os cancelamentos e faltas mais antigos que esse prazo automaticamente, sem apagar o histórico de atendimentos nem os pontos de fidelidade dos clientes."}
+            </p>
+          </div>
+
+          {/* Opção para incluir itens do histórico na auto-limpeza */}
+          <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between gap-3">
+            <div>
+              <span className="text-xs font-bold text-zinc-200 block">
+                🧹 Incluir Limpeza de Itens de Histórico (Atendimentos Concluídos)
+              </span>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                Ao ativar, atendimentos concluídos e registros do histórico anteriores a {config.auto_limpeza_cancelados_dias || 7} dias também serão removidos automaticamente, mantendo a agenda e o financeiro limpos e leves.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={config.auto_limpeza_incluir_historico ?? false}
+                onChange={(e) =>
+                  setConfig({ ...config, auto_limpeza_incluir_historico: e.target.checked })
+                }
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
         </div>
 
         {/* SEGURANÇA & ACESSO AO PAINEL ADMINISTRATIVO */}
