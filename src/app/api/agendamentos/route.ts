@@ -33,7 +33,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { cliente_nome, cliente_telefone, servico, horario_inicio, origem = "WHATSAPP", observacoes } = body;
+    const { cliente_nome, cliente_telefone, servico, horario_inicio, origem = "WHATSAPP", observacoes, forma_pagamento } = body;
 
     if (!cliente_nome || !cliente_telefone || !servico || !horario_inicio) {
       return NextResponse.json({ error: "Campos obrigatórios ausentes" }, { status: 400 });
@@ -83,6 +83,7 @@ export async function POST(req: Request) {
       valor_cobrado: servico.preco,
       valor_sinal: valorSinal,
       tempo_expiracao_sinal: statusInicial === "AGUARDANDO_SINAL" ? tempoExpiracao : null,
+      forma_pagamento: forma_pagamento || null,
       observacoes: observacoes || null,
       created_at: new Date().toISOString(),
     };
@@ -112,6 +113,7 @@ export async function POST(req: Request) {
       horario_inicio,
       origem,
       observacoes,
+      forma_pagamento,
       status: statusInicial,
       valor_sinal: valorSinal,
     });

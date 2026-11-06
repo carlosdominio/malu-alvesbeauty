@@ -64,6 +64,9 @@ export default function AgendaPage() {
   const [novoTelefone, setNovoTelefone] = useState("");
   const [novoServicoId, setNovoServicoId] = useState("");
   const [novoHorario, setNovoHorario] = useState("10:00");
+  const [novoFormaPagamento, setNovoFormaPagamento] = useState<FormaPagamento>("PIX");
+  const [novoPrecisaTroco, setNovoPrecisaTroco] = useState(false);
+  const [novoTrocoPara, setNovoTrocoPara] = useState("");
 
   // Data de Hoje
   const hoje = new Date();
@@ -301,6 +304,31 @@ export default function AgendaPage() {
     const servico = servicos.find((s) => s.id === novoServicoId);
     if (!servico) return;
 
+    const precoEfetivo =
+      servico.em_promocao && servico.preco_promocional ? servico.preco_promocional : servico.preco;
+    const trocoParaNum = parseFloat(novoTrocoPara.replace(",", ".")) || 0;
+    let observacoesFinal = "";
+
+    if (novoFormaPagamento === "DINHEIRO") {
+      if (novoPrecisaTroco) {
+        if (trocoParaNum <= 0) {
+          toastWarning("Informe o Valor", "Por favor, informe a quantia em dinheiro para calcular o troco.");
+          return;
+        }
+        if (trocoParaNum < precoEfetivo) {
+          toastWarning(
+            "Valor Insuficiente",
+            `O valor para troco (${formatarMoeda(trocoParaNum)}) não pode ser menor que o serviço (${formatarMoeda(precoEfetivo)}).`
+          );
+          return;
+        }
+        const trocoDevolver = trocoParaNum - precoEfetivo;
+        observacoesFinal = `Dinheiro (Troco para ${formatarMoeda(trocoParaNum)} • Devolver ${formatarMoeda(trocoDevolver)})`;
+      } else {
+        observacoesFinal = "Dinheiro (Sem troco)";
+      }
+    }
+
     await fetch("/api/agendamentos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -310,12 +338,18 @@ export default function AgendaPage() {
         servico,
         horario_inicio: `${dataFiltro}T${novoHorario}:00`,
         origem: "MANUAL",
+        status: "CONFIRMADO",
+        forma_pagamento: novoFormaPagamento,
+        observacoes: observacoesFinal || undefined,
       }),
     });
 
     toastSuccess("Agendamento Criado!", `${novoNome} agendado para às ${novoHorario}.`);
     setNovoNome("");
     setNovoTelefone("");
+    setNovoFormaPagamento("PIX");
+    setNovoPrecisaTroco(false);
+    setNovoTrocoPara("");
     setModalNovoAgendamentoAberto(false);
     carregarDados();
   };
@@ -339,6 +373,18 @@ export default function AgendaPage() {
     if (abaAtiva === "CANCELADOS") return ag.status === "CANCELADO" || ag.status === "FALTOU";
     return true; // "TODOS"
   });
+
+  // Cálculo de Troco para o Agendamento Manual
+  const servicoManualSelecionado = servicos.find((s) => s.id === novoServicoId) || servicos[0];
+  const precoCobradoManual = servicoManualSelecionado
+    ? servicoManualSelecionado.em_promocao && servicoManualSelecionado.preco_promocional
+      ? servicoManualSelecionado.preco_promocional
+      : servicoManualSelecionado.preco
+    : 0;
+
+  const valorTrocoParaNum = parseFloat(novoTrocoPara.replace(",", ".")) || 0;
+  const valorTrocoCalculado = Math.max(0, valorTrocoParaNum - precoCobradoManual);
+  const trocoInsuficiente = novoPrecisaTroco && valorTrocoParaNum > 0 && valorTrocoParaNum < precoCobradoManual;
 
   return (
     <div className="space-y-6">
@@ -727,6 +773,11 @@ export default function AgendaPage() {
                           </Badge>
                         ))}
                       {ag.status === "CONFIRMADO" && <Badge variant="warning">Aguardando Atendimento</Badge>}
+                      {ag.forma_pagamento && ag.status !== "CONCLUIDO" && (
+                        <Badge variant="neutral" className="text-[10px] flex items-center gap-1 font-semibold">
+                          {ag.forma_pagamento === "PIX" ? "⚡ Pix" : ag.forma_pagamento === "CARTAO" ? "💳 Cartão" : "💵 Dinheiro"}
+                        </Badge>
+                      )}
                       {ag.status === "CONCLUIDO" && (
                         <Badge variant="success">
                           Concluído • {ag.forma_pagamento || "Pago"}
@@ -739,6 +790,13 @@ export default function AgendaPage() {
                     <p className="text-xs text-amber-400 font-semibold mt-0.5">
                       {ag.servico_titulo} • {formatarMoeda(ag.valor_cobrado)}
                     </p>
+
+                    {ag.observacoes && (
+                      <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-xl w-fit">
+                        <span>📝</span>
+                        <span>{ag.observacoes}</span>
+                      </div>
+                    )}
 
                     {ag.status === "AGUARDANDO_SINAL" && ag.valor_sinal && (
                       <p className="text-[11px] text-amber-300 font-semibold mt-0.5">
@@ -1128,6 +1186,148 @@ export default function AgendaPage() {
               />
             </div>
           </div>
+
+          {/* Forma de Pagamento */}
+          <div>
+            <label className="text-xs font-bold text-zinc-300 block mb-2">Forma de Pagamento</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  { id: "PIX", label: "PIX", icon: "⚡" },
+                  { id: "DINHEIRO", label: "Dinheiro", icon: "💵" },
+                  { id: "CARTAO", label: "Cartão", icon: "💳" },
+                ] as { id: FormaPagamento; label: string; icon: string }[]
+              ).map((f) => {
+                const isSel = novoFormaPagamento === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => {
+                      setNovoFormaPagamento(f.id);
+                      if (f.id !== "DINHEIRO") {
+                        setNovoPrecisaTroco(false);
+                        setNovoTrocoPara("");
+                      }
+                    }}
+                    className={cn(
+                      "py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 select-none",
+                      isSel
+                        ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/20 font-black"
+                        : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-850"
+                    )}
+                  >
+                    <span>{f.icon}</span>
+                    <span>{f.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Opção de Troco para Dinheiro */}
+          {novoFormaPagamento === "DINHEIRO" && (
+            <div className="p-3.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 space-y-3 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+                    <span>🪙</span> Precisa de troco?
+                  </span>
+                  <p className="text-[11px] text-zinc-500">
+                    Total a pagar:{" "}
+                    <strong className="text-amber-400 font-bold">
+                      {formatarMoeda(precoCobradoManual)}
+                    </strong>
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={novoPrecisaTroco}
+                    onChange={(e) => {
+                      setNovoPrecisaTroco(e.target.checked);
+                      if (!e.target.checked) setNovoTrocoPara("");
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {novoPrecisaTroco && (
+                <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
+                  <label className="text-xs font-bold text-zinc-300 block">
+                    Troco para quanto? (R$)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">
+                      R$
+                    </span>
+                    <input
+                      type="number"
+                      step="any"
+                      min={precoCobradoManual}
+                      placeholder={String(Math.ceil((precoCobradoManual + 10) / 10) * 10 || 50)}
+                      value={novoTrocoPara}
+                      onChange={(e) => setNovoTrocoPara(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 font-bold focus:outline-none focus:border-amber-500"
+                      required={novoPrecisaTroco}
+                    />
+                  </div>
+
+                  {/* Atalhos de Cédulas */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] text-zinc-400">Sugestões:</span>
+                    {[20, 50, 100, 200]
+                      .filter((val) => val >= precoCobradoManual)
+                      .map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setNovoTrocoPara(String(val))}
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors",
+                            novoTrocoPara === String(val)
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                              : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                          )}
+                        >
+                          R$ {val}
+                        </button>
+                      ))}
+                  </div>
+
+                  {/* Badge de Cálculo em Tempo Real */}
+                  {valorTrocoParaNum > 0 && (
+                    <div
+                      className={cn(
+                        "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between transition-all",
+                        trocoInsuficiente
+                          ? "bg-red-500/10 border-red-500/30 text-red-300"
+                          : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                      )}
+                    >
+                      {trocoInsuficiente ? (
+                        <span>
+                          ⚠️ Valor menor que o serviço ({formatarMoeda(precoCobradoManual)})
+                        </span>
+                      ) : (
+                        <>
+                          <span className="flex items-center gap-1">
+                            <span>💵</span>
+                            <span>Troco a devolver:</span>
+                          </span>
+                          <span className="text-sm font-black text-emerald-400">
+                            {formatarMoeda(valorTrocoCalculado)}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <Button type="submit" variant="gold" size="lg" className="w-full font-bold">
             Adicionar na Agenda

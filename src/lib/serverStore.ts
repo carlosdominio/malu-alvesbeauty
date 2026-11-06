@@ -160,6 +160,7 @@ export const ServerStore = {
     observacoes?: string;
     status?: StatusAgendamento;
     valor_sinal?: number;
+    forma_pagamento?: FormaPagamento;
   }): Agendamento {
     const db = readDB();
     const { cliente_nome, cliente_telefone, servico, horario_inicio, origem = "WHATSAPP", observacoes } = params;
@@ -224,6 +225,7 @@ export const ServerStore = {
       valor_cobrado: servico.preco,
       valor_sinal: valorSinalCalculado,
       tempo_expiracao_sinal: statusInicial === "AGUARDANDO_SINAL" ? tempoExpiracao : undefined,
+      forma_pagamento: params.forma_pagamento,
       observacoes,
       created_at: new Date().toISOString(),
     };

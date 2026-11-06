@@ -202,7 +202,14 @@ export function SoundNotificationButton() {
 
       {/* Dropdown / Popover de Notificações */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <>
+          {/* Backdrop no mobile para centralização perfeita e fechar ao tocar fora */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 sm:hidden animate-in fade-in duration-150"
+            onClick={() => setIsOpen(false)}
+          />
+
+          <div className="fixed top-16 left-3 right-3 mx-auto max-w-sm sm:max-w-none sm:absolute sm:top-full sm:left-auto sm:right-0 sm:mx-0 sm:mt-2 sm:w-96 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
           {/* Header do Popover */}
           <div className="p-3.5 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -370,6 +377,7 @@ export function SoundNotificationButton() {
             </Link>
           </div>
         </div>
+        </>
       )}
     </div>
   );
