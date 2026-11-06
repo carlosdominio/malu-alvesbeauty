@@ -129,44 +129,52 @@ export default function ConfigPage() {
         {/* ========================================================================= */}
         {/* SEÇÃO: GARANTIA DE HORÁRIO & SINAL ANTECIPADO (ANTI-NO-SHOW) */}
         {/* ========================================================================= */}
-        <div className="p-5 rounded-2xl bg-zinc-950/70 border border-amber-500/30 space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <QrCode className="w-4 h-4" />
+        <div className="p-4 sm:p-5 rounded-2xl bg-zinc-950/80 border border-amber-500/30 space-y-4 shadow-lg shadow-black/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-sm shadow-amber-500/20 mt-0.5">
+                <QrCode className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-sm font-extrabold text-zinc-100 flex items-center gap-2">
-                  <span>Sinal Antecipado via PIX</span>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
+                    Sinal Antecipado via PIX
+                  </h3>
+                  <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
                     Anti-Falta
                   </span>
-                </h3>
-                <p className="text-[11px] text-zinc-400 mt-0.5">
+                </div>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
                   Exija um sinal via PIX para garantir a reserva e evitar horários vazios na agenda.
                 </p>
               </div>
             </div>
 
-            {/* Toggle Liga / Desliga */}
-            <button
-              type="button"
-              onClick={() =>
-                setConfig({
-                  ...config,
-                  exigir_sinal: !(config.exigir_sinal ?? true),
-                })
-              }
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                (config.exigir_sinal ?? true) ? "bg-amber-500" : "bg-zinc-800"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-zinc-950 transition-transform ${
-                  (config.exigir_sinal ?? true) ? "translate-x-6" : "translate-x-1"
+            {/* Botão de Toggle Claro, Táctil e Responsivo */}
+            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80">
+              <span className="sm:hidden text-xs font-bold text-zinc-400">Cobrança de Sinal:</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setConfig({
+                    ...config,
+                    exigir_sinal: !(config.exigir_sinal ?? true),
+                  })
+                }
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-xs font-black select-none shrink-0 shadow-sm ${
+                  (config.exigir_sinal ?? true)
+                    ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-amber-500/25 active:scale-95"
+                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200 active:scale-95"
                 }`}
-              />
-            </button>
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    (config.exigir_sinal ?? true) ? "bg-zinc-950 animate-pulse" : "bg-zinc-600"
+                  }`}
+                />
+                <span>{(config.exigir_sinal ?? true) ? "ATIVADO" : "DESATIVADO"}</span>
+              </button>
+            </div>
           </div>
 
           {(config.exigir_sinal ?? true) && (
@@ -255,15 +263,15 @@ export default function ConfigPage() {
                               sinal_porcentagem: parseInt(e.target.value, 10) || 30,
                             })
                           }
-                          className="w-24 px-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-black text-center"
+                          className="w-20 sm:w-24 px-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-black text-center shrink-0"
                         />
-                        <div className="flex items-center gap-1 flex-1">
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           {[20, 30, 50].map((pct) => (
                             <button
                               key={pct}
                               type="button"
                               onClick={() => setConfig({ ...config, sinal_porcentagem: pct })}
-                              className={`flex-1 py-2 rounded-lg text-xs font-extrabold border transition-all ${
+                              className={`flex-1 py-2 rounded-lg text-xs font-extrabold border transition-all truncate ${
                                 (config.sinal_porcentagem ?? 30) === pct
                                   ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                                   : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-850"
