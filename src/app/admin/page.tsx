@@ -341,25 +341,40 @@ export default function AgendaPage() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
           <button
             onClick={() => mudarDia(-1)}
+            aria-label="Dia anterior"
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          <div className="text-center">
+          <label className="relative flex flex-col items-center justify-center cursor-pointer group px-3 py-1 rounded-xl hover:bg-zinc-800/40 transition-colors">
+            <div className="flex items-center justify-center gap-1.5 text-zinc-100 group-hover:text-amber-400 transition-colors">
+              <CalendarIcon className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="font-extrabold text-sm tracking-wide">
+                {dataFiltro ? dataFiltro.split("-").reverse().join("/") : ""}
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-400 font-semibold mt-0.5 capitalize text-center">
+              {dataFiltro ? new Date(`${dataFiltro}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long" }) : ""}
+            </p>
             <input
               type="date"
               value={dataFiltro}
               onChange={(e) => setDataFiltro(e.target.value)}
-              className="bg-transparent text-zinc-100 font-bold text-sm text-center focus:outline-none cursor-pointer"
+              onClick={(e) => {
+                try {
+                  if ("showPicker" in HTMLInputElement.prototype) {
+                    e.currentTarget.showPicker();
+                  }
+                } catch {}
+              }}
+              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
             />
-            <p className="text-[11px] text-amber-400 font-semibold mt-0.5">
-              {new Date(`${dataFiltro}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long" })}
-            </p>
-          </div>
+          </label>
 
           <button
             onClick={() => mudarDia(1)}
+            aria-label="Próximo dia"
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             <ChevronRight className="w-5 h-5" />
