@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -41,7 +41,7 @@ type FiltroAba = "AGUARDANDO_SINAL" | "PENDENTES" | "CONCLUIDOS" | "TODOS" | "CA
 
 export default function AgendaPage() {
   const [dataFiltro, setDataFiltro] = useState<string>("");
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [todosAgendamentos, setTodosAgendamentos] = useState<Agendamento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [config, setConfig] = useState<BarbeariaConfig | null>(null);
@@ -98,7 +98,7 @@ export default function AgendaPage() {
     if (!silencioso) setLoading(true);
     try {
       const [resAg, resCli, srvs, cfg, exp, blq] = await Promise.all([
-        fetch(`/api/agendamentos?data=${dataFiltro}`, { cache: "no-store" }),
+        fetch(`/api/agendamentos`, { cache: "no-store" }),
         fetch(`/api/clientes`, { cache: "no-store" }),
         DataStore.getServicos(),
         DataStore.getConfig(),
@@ -158,7 +158,7 @@ export default function AgendaPage() {
           agendamentosAnterioresRef.current = novoMapa;
         }
 
-        setAgendamentos(ags);
+        setTodosAgendamentos(ags);
       }
       if (resCli.ok) {
         const clis = await resCli.json();
@@ -207,13 +207,13 @@ export default function AgendaPage() {
     forma?: FormaPagamento
   ) => {
     // Atualização otimista imediata na interface
-    setAgendamentos((prev) =>
+    setTodosAgendamentos((prev) =>
       prev.map((a) =>
         a.id === id ? { ...a, status: novoStatus, forma_pagamento: forma || a.forma_pagamento } : a
       )
     );
 
-    const ag = agendamentos.find((a) => a.id === id);
+    const ag = todosAgendamentos.find((a) => a.id === id);
 
     try {
       await fetch("/api/agendamentos", {
@@ -407,30 +407,60 @@ export default function AgendaPage() {
     setNovoFormaPagamento("PIX");
     setNovoPrecisaTroco(false);
     setNovoTrocoPara("");
+    setNovoHorario("");
     setNovoTipoFluxo("AGENDAR");
     setModalNovoAgendamentoAberto(false);
-    carregarDados();
+
+    if (novoTipoFluxo === "AGENDAR") {
+      setDataFiltro(dataAlvoManual);
+      setAbaAtiva("AGUARDANDO_SINAL");
+    } else {
+      setDataFiltro(dataAlvoManual);
+      setAbaAtiva("CONCLUIDOS");
+    }
+    carregarDados(true);
   };
+
+  // Agendamentos pertencentes ao dia selecionado no calendário
+  const agendamentos = useMemo(
+    () => todosAgendamentos.filter((a) => a.horario_inicio.startsWith(dataFiltro)),
+    [todosAgendamentos, dataFiltro]
+  );
 
   // Métricas de contagem por status
   const limiteMaximo = config?.limite_maximo_agendamentos_dia || 15;
-  const agendamentosAguardandoSinal = agendamentos.filter((a) => a.status === "AGUARDANDO_SINAL");
-  const agendamentosPendentes = agendamentos.filter((a) => a.status === "CONFIRMADO");
-  const agendamentosConcluidos = agendamentos.filter((a) => a.status === "CONCLUIDO");
-  const agendamentosCancelados = agendamentos.filter((a) => a.status === "CANCELADO" || a.status === "FALTOU");
+  // Sinais pendentes do sistema todo (prioridade máxima para confirmação de PIX em 30 min)
+  const agendamentosAguardandoSinal = useMemo(
+    () => todosAgendamentos.filter((a) => a.status === "AGUARDANDO_SINAL"),
+    [todosAgendamentos]
+  );
+  const agendamentosPendentes = useMemo(
+    () => agendamentos.filter((a) => a.status === "CONFIRMADO"),
+    [agendamentos]
+  );
+  const agendamentosConcluidos = useMemo(
+    () => agendamentos.filter((a) => a.status === "CONCLUIDO"),
+    [agendamentos]
+  );
+  const agendamentosCancelados = useMemo(
+    () => agendamentos.filter((a) => a.status === "CANCELADO" || a.status === "FALTOU"),
+    [agendamentos]
+  );
 
   const totalAgendados = agendamentos.filter((a) => a.status !== "CANCELADO").length;
   const faturamentoHoje = agendamentosConcluidos.reduce((acc, a) => acc + a.valor_cobrado, 0);
   const diaLotado = totalAgendados >= limiteMaximo;
 
   // Filtragem dos agendamentos a serem exibidos de acordo com a aba selecionada
-  const agendamentosFiltrados = agendamentos.filter((ag) => {
-    if (abaAtiva === "AGUARDANDO_SINAL") return ag.status === "AGUARDANDO_SINAL";
-    if (abaAtiva === "PENDENTES") return ag.status === "CONFIRMADO";
-    if (abaAtiva === "CONCLUIDOS") return ag.status === "CONCLUIDO";
-    if (abaAtiva === "CANCELADOS") return ag.status === "CANCELADO" || ag.status === "FALTOU";
-    return true; // "TODOS"
-  });
+  const agendamentosFiltrados = useMemo(() => {
+    if (abaAtiva === "AGUARDANDO_SINAL") {
+      return [...agendamentosAguardandoSinal].sort((a, b) => a.horario_inicio.localeCompare(b.horario_inicio));
+    }
+    if (abaAtiva === "PENDENTES") return agendamentosPendentes;
+    if (abaAtiva === "CONCLUIDOS") return agendamentosConcluidos;
+    if (abaAtiva === "CANCELADOS") return agendamentosCancelados;
+    return agendamentos; // "TODOS"
+  }, [abaAtiva, agendamentosAguardandoSinal, agendamentosPendentes, agendamentosConcluidos, agendamentosCancelados, agendamentos]);
 
   // Cálculo de Troco, Slots e Sinal para o Agendamento Manual
   const servicoManualSelecionado = servicos.find((s) => s.id === novoServicoId) || servicos[0];
@@ -448,7 +478,7 @@ export default function AgendaPage() {
         data: dataAlvoManual,
         servico: servicoManualSelecionado,
         expedientes: expediente,
-        agendamentosExistentes: agendamentos,
+        agendamentosExistentes: todosAgendamentos,
         bloqueios,
         tempoBufferMinutos: config?.tempo_buffer_minutos || 5,
         limiteMaximoDia: config?.limite_maximo_agendamentos_dia || 15,
@@ -814,9 +844,14 @@ export default function AgendaPage() {
                 {/* Horário & Info do Cliente */}
                 <div className="flex items-start gap-4">
                   {/* Badge de Horário */}
-                  <div className="flex flex-col items-center justify-center w-16 h-16 rounded-2xl bg-zinc-950 border border-zinc-800 shrink-0">
+                  <div className="flex flex-col items-center justify-center min-w-16 px-1.5 h-16 rounded-2xl bg-zinc-950 border border-zinc-800 shrink-0">
                     <span className="text-sm font-black text-amber-400">{horaInicio}</span>
                     <span className="text-[10px] text-zinc-500">{horaFim}</span>
+                    {ag.horario_inicio.split("T")[0] !== dataFiltro && (
+                      <span className="text-[9px] font-black text-amber-300 bg-amber-500/10 px-1 rounded border border-amber-500/20 mt-0.5">
+                        {ag.horario_inicio.split("T")[0].split("-").reverse().slice(0, 2).join("/")}
+                      </span>
+                    )}
                   </div>
 
                   {/* Detalhes */}

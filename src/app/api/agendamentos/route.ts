@@ -97,7 +97,7 @@ export async function POST(req: Request) {
           ultimo_servico_id: servico.id,
           ultimo_servico_nome: servico.titulo,
           ultima_visita: horario_inicio,
-          total_visitas: 1,
+          total_visitas: statusInicial === "CONCLUIDO" ? 1 : 0,
         });
 
         await supabase.from("agendamentos").insert(novo);
