@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Agendamento, BarbeariaConfig, Cliente, FormaPagamento, Servico, StatusAgendamento } from "@/types";
 import { DataStore } from "@/lib/dataStore";
+import { SoundNotification } from "@/lib/audioNotification";
 import { formatarMoeda, formatarTelefone, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -69,6 +70,10 @@ export default function AgendaPage() {
   const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
   const ehHoje = dataFiltro === hojeStr;
 
+  // Refs para monitoramento de novos agendamentos e disparo de som
+  const agendamentosAnterioresRef = useRef<Map<string, StatusAgendamento>>(new Map());
+  const primeiraCargaRef = useRef(true);
+
   // Carregar agendamentos e clientes da API em tempo real
   const carregarDados = useCallback(async (silencioso = false) => {
     if (!dataFiltro) return;
@@ -82,7 +87,57 @@ export default function AgendaPage() {
       ]);
 
       if (resAg.ok) {
-        const ags = await resAg.json();
+        const ags: Agendamento[] = await resAg.json();
+
+        // Verificar novos agendamentos para disparo de notificação sonora
+        if (primeiraCargaRef.current) {
+          const mapaInicial = new Map<string, StatusAgendamento>();
+          ags.forEach((a) => mapaInicial.set(a.id, a.status));
+          agendamentosAnterioresRef.current = mapaInicial;
+          primeiraCargaRef.current = false;
+        } else {
+          let temNovo = false;
+          let agNovo: Agendamento | null = null;
+          let temComprovanteAprovado = false;
+
+          for (const ag of ags) {
+            const statusAntigo = agendamentosAnterioresRef.current.get(ag.id);
+            if (!statusAntigo) {
+              temNovo = true;
+              agNovo = ag;
+              break;
+            } else if (statusAntigo === "AGUARDANDO_SINAL" && ag.status === "CONFIRMADO") {
+              temComprovanteAprovado = true;
+              agNovo = ag;
+              break;
+            }
+          }
+
+          if (temNovo && agNovo) {
+            SoundNotification.notifyNewEvent(
+              "Novo Agendamento! 🔔",
+              `${agNovo.cliente_nome} • ${agNovo.servico_titulo}`
+            );
+            toastSuccess(
+              "Novo Agendamento Recebido! 🔔",
+              `${agNovo.cliente_nome} agendou ${agNovo.servico_titulo} às ${agNovo.horario_inicio.split("T")[1]?.slice(0, 5)}.`
+            );
+          } else if (temComprovanteAprovado && agNovo) {
+            SoundNotification.notifyNewEvent(
+              "Comprovante Confirmado! ✨",
+              `${agNovo.cliente_nome} teve o sinal aprovado.`
+            );
+            toastSuccess(
+              "Sinal Confirmado! ✨",
+              `O horário de ${agNovo.cliente_nome} foi confirmado com sucesso!`
+            );
+          }
+
+          const novoMapa = new Map<string, StatusAgendamento>();
+          ags.forEach((a) => novoMapa.set(a.id, a.status));
+          agendamentosAnterioresRef.current = novoMapa;
+        }
+
         setAgendamentos(ags);
       }
       if (resCli.ok) {
@@ -99,7 +154,7 @@ export default function AgendaPage() {
     } finally {
       if (!silencioso) setLoading(false);
     }
-  }, [dataFiltro, novoServicoId]);
+  }, [dataFiltro, novoServicoId, toastSuccess]);
 
   useEffect(() => {
     setDataFiltro(hojeStr);

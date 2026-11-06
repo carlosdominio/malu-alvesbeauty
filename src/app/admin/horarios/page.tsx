@@ -110,40 +110,40 @@ export default function HorariosPage() {
 
               {/* Horários de Expediente */}
               {exp.ativo ? (
-                <div className="flex flex-wrap items-center gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center gap-2.5 w-full md:w-auto text-xs">
                   {/* Expediente */}
-                  <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800">
-                    <span className="text-zinc-400 font-semibold">Abre:</span>
+                  <div className="flex items-center justify-between sm:justify-start gap-2 bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-800 w-full sm:w-auto">
+                    <span className="text-zinc-400 font-semibold shrink-0">Abre:</span>
                     <input
                       type="time"
                       value={exp.hora_inicio}
                       onChange={(e) => handleChange(exp.dia_semana, "hora_inicio", e.target.value)}
-                      className="bg-transparent text-zinc-100 font-bold focus:outline-none"
+                      className="bg-transparent text-zinc-100 font-bold text-center focus:outline-none"
                     />
-                    <span className="text-zinc-500">até</span>
+                    <span className="text-zinc-500 shrink-0">até</span>
                     <input
                       type="time"
                       value={exp.hora_fim}
                       onChange={(e) => handleChange(exp.dia_semana, "hora_fim", e.target.value)}
-                      className="bg-transparent text-zinc-100 font-bold focus:outline-none"
+                      className="bg-transparent text-zinc-100 font-bold text-center focus:outline-none"
                     />
                   </div>
 
                   {/* Intervalo de Almoço */}
-                  <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800">
-                    <span className="text-zinc-400 font-semibold">Almoço:</span>
+                  <div className="flex items-center justify-between sm:justify-start gap-2 bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-800 w-full sm:w-auto">
+                    <span className="text-zinc-400 font-semibold shrink-0">Almoço:</span>
                     <input
                       type="time"
                       value={exp.intervalo_inicio || "12:00"}
                       onChange={(e) => handleChange(exp.dia_semana, "intervalo_inicio", e.target.value)}
-                      className="bg-transparent text-zinc-100 font-bold focus:outline-none"
+                      className="bg-transparent text-zinc-100 font-bold text-center focus:outline-none"
                     />
-                    <span className="text-zinc-500">às</span>
+                    <span className="text-zinc-500 shrink-0">às</span>
                     <input
                       type="time"
                       value={exp.intervalo_fim || "13:00"}
                       onChange={(e) => handleChange(exp.dia_semana, "intervalo_fim", e.target.value)}
-                      className="bg-transparent text-zinc-100 font-bold focus:outline-none"
+                      className="bg-transparent text-zinc-100 font-bold text-center focus:outline-none"
                     />
                   </div>
                 </div>

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sparkles, Calendar, DollarSign, Users, Clock, Settings, MessageSquare, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PWAInstallButton } from "./PWAInstallButton";
+import { SoundNotificationButton } from "./SoundNotificationButton";
 
 interface HeaderProps {
   nomeBarbearia?: string;
@@ -72,6 +74,8 @@ export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = f
         <div className="flex items-center gap-2">
           {isAdmin ? (
             <div className="flex items-center gap-2">
+              <PWAInstallButton />
+              <SoundNotificationButton />
               <button
                 type="button"
                 onClick={() => {
