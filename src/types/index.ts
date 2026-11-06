@@ -1,5 +1,25 @@
 export type DiaSemana = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
 
+export interface RespostaAutomatica {
+  id: string;
+  opcao_numero?: string; // Ex: "4", "5"
+  titulo: string; // Ex: "Localização / Endereço"
+  palavras_chave?: string; // Ex: "endereço, onde fica, rua, localizacao, maps"
+  resposta: string; // Mensagem enviada pelo robô
+  ativo: boolean;
+}
+
+export interface MensagensWhatsAppConfig {
+  boas_vindas?: string;
+  solicitacao_sinal?: string;
+  confirmacao_agendamento?: string;
+  lembrete_2h?: string;
+  agradecimento_fidelidade?: string;
+  cancelamento_studio?: string;
+  falta_comparecimento?: string;
+  respostas_personalizadas?: RespostaAutomatica[];
+}
+
 export interface BarbeariaConfig {
   id: string;
   nome_barbearia: string;
@@ -20,6 +40,7 @@ export interface BarbeariaConfig {
   auto_limpeza_cancelados_dias?: number; // 0 = Desativado, 7, 15, 30, 60 dias
   admin_usuario?: string;
   admin_senha?: string;
+  mensagens_zap?: MensagensWhatsAppConfig;
 }
 
 export interface ExpedienteDia {
@@ -47,6 +68,8 @@ export interface Servico {
   duracao_minutos: number;
   ativo: boolean;
   icone?: string;
+  em_promocao?: boolean;
+  preco_promocional?: number;
 }
 
 export interface HistoricoCorte {

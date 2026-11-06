@@ -300,4 +300,13 @@ export const ServerStore = {
     console.log(`>>> [ServerStore] Limpeza de agendamentos (${modo}): ${removidos} agendamentos removidos.`);
     return removidos;
   },
+
+  limparClientes(): number {
+    const db = readDB();
+    const totalAnterior = db.clientes.length;
+    db.clientes = [];
+    writeDB(db);
+    console.log(`>>> [ServerStore] Limpeza de clientes: ${totalAnterior} clientes removidos.`);
+    return totalAnterior;
+  },
 };

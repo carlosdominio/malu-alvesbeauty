@@ -188,6 +188,58 @@ function obterServicosAtivos() {
   return servicosPadrao;
 }
 
+function formatarMensagemZap(template, vars) {
+  let resultado = template;
+  for (const chave in vars) {
+    const val = vars[chave] !== undefined && vars[chave] !== null ? String(vars[chave]) : "";
+    resultado = resultado.split(`{${chave}}`).join(val);
+  }
+  return resultado;
+}
+
+function formatarListaServicosZap(servicos) {
+  return servicos
+    .map((s, idx) => {
+      const precoOriginal = formatarMoeda(s.preco);
+      if (s.em_promocao && s.preco_promocional && s.preco_promocional < s.preco) {
+        const precoPromo = formatarMoeda(s.preco_promocional);
+        return `*${idx + 1}* - ${s.titulo} (~${precoOriginal}~ 🔥 *${precoPromo}* PROMOÇÃO! - ${s.duracao_minutos}min)`;
+      }
+      return `*${idx + 1}* - ${s.titulo} (${precoOriginal} - ${s.duracao_minutos}min)`;
+    })
+    .join("\n");
+}
+
+function verificarRespostaCustomizada(textoLimpo, config) {
+  const customizadas = config?.mensagens_zap?.respostas_personalizadas;
+  if (!customizadas || !Array.isArray(customizadas)) return null;
+
+  for (const resp of customizadas) {
+    if (resp.ativo === false) continue;
+
+    if (resp.opcao_numero && textoLimpo === resp.opcao_numero.trim().toLowerCase()) {
+      return resp;
+    }
+
+    if (resp.palavras_chave) {
+      const palavras = resp.palavras_chave
+        .split(",")
+        .map((p) => p.trim().toLowerCase())
+        .filter(Boolean);
+
+      if (palavras.some((p) => textoLimpo.includes(p))) {
+        return resp;
+      }
+    }
+
+    if (resp.titulo && textoLimpo.includes(resp.titulo.toLowerCase())) {
+      return resp;
+    }
+  }
+
+  return null;
+}
+
 // Buscar cliente cadastrado pelo telefone
 function buscarClientePorTelefone(telefoneLimpo) {
   const db = lerBancoCentral();
@@ -515,7 +567,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       } else if (textoLimpo === "2" || textoLimpo.includes("novo") || textoLimpo.includes("outro")) {
         resposta =
           `✂️ *Escolha o serviço adicional desejado:*\n\n` +
-          servicosAtivos.map((s, idx) => `*${idx + 1}* - ${s.titulo} (${formatarMoeda(s.preco)} - ${s.duracao_minutos}min)`).join("\n") +
+          formatarListaServicosZap(servicosAtivos) +
           `\n\n_Digite o número do serviço desejado:_`;
         session = { step: "ESCOLHENDO_SERVICO", nomeCliente: nomeDetectado };
       } else if (textoLimpo === "3" || textoLimpo.includes("dono") || textoLimpo.includes("designer") || textoLimpo.includes("atendente")) {
@@ -564,29 +616,50 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
         } else {
           resposta =
             `✨ *Escolha o procedimento desejado:*\n\n` +
-            servicosAtivos.map((s, idx) => `*${idx + 1}* - ${s.titulo} (${formatarMoeda(s.preco)} - ${s.duracao_minutos}min)`).join("\n") +
+            formatarListaServicosZap(servicosAtivos) +
             `\n\n_Digite o número do procedimento desejado (ex: 1, 2 ou 3):_`;
           session = { step: "ESCOLHENDO_SERVICO", nomeCliente: nomeDetectado };
         }
       } else if (textoLimpo === "2" || textoLimpo.includes("preço") || textoLimpo.includes("serviço") || textoLimpo.includes("procedimento")) {
         resposta =
           `📋 *Nossa Tabela de Procedimentos:*\n\n` +
-          servicosAtivos.map((s) => `• *${s.titulo}*: ${formatarMoeda(s.preco)} (${s.duracao_minutos} min)`).join("\n") +
+          formatarListaServicosZap(servicosAtivos) +
           `\n\nDigite *1* para agendar seu horário!`;
       } else if (textoLimpo === "3" || textoLimpo.includes("dono") || textoLimpo.includes("humano") || textoLimpo.includes("designer")) {
         resposta = `👩‍💼 Um momento, ${nomeDetectado}! Já notifiquei a equipe e iremos te responder em instantes por aqui.`;
       } else {
-        const saudacao = clienteCadastrado
-          ? `Olá ${nomeDetectado}! Que bom ter você de volta! ✨ (${clienteCadastrado.total_visitas || 1} atendimentos no Cartão Fidelidade ⭐)`
-          : `Olá, ${nomeDetectado}! Bem-vinda ao Studio Malu Alves Beauty! ✨`;
+        // Checar se o cliente digitou uma das novas opções customizadas cadastradas pelo ADM
+        const respCustom = verificarRespostaCustomizada(textoLimpo, db.config);
+        if (respCustom) {
+          resposta = `${respCustom.resposta}\n\n_Digite *1* para agendar ou *Menu* para ver as opções._`;
+        } else {
+          const customizadas = (db.config?.mensagens_zap?.respostas_personalizadas || []).filter((r) => r.ativo);
+          let linhasCustom = "";
+          if (customizadas.length > 0) {
+            linhasCustom = "\n" + customizadas.map((r, i) => `*${r.opcao_numero || i + 4}* ➔ ${r.titulo}`).join("\n");
+          }
 
-        resposta =
-          `✨ *${saudacao}*\n\n` +
-          `Como posso te ajudar hoje?\n\n` +
-          `*1* ➔ Agendar um Horário\n` +
-          `*2* ➔ Ver Procedimentos e Valores\n` +
-          `*3* ➔ Falar com a Equipe\n\n` +
-          `_Digite o número da opção desejada:_`;
+          const saudacao = clienteCadastrado
+            ? `Olá ${nomeDetectado}! Que bom ter você de volta! ✨ (${clienteCadastrado.total_visitas || 1} atendimentos no Cartão Fidelidade ⭐)`
+            : `Olá, ${nomeDetectado}! Bem-vinda ao Studio Malu Alves Beauty! ✨`;
+
+          if (db.config?.mensagens_zap?.boas_vindas) {
+            resposta = formatarMensagemZap(db.config.mensagens_zap.boas_vindas, {
+              cliente: nomeDetectado,
+              saudacao,
+              opcoes_personalizadas: linhasCustom.trim(),
+            });
+          } else {
+            resposta =
+              `✨ *${saudacao}*\n\n` +
+              `Como posso te ajudar hoje?\n\n` +
+              `*1* ➔ Agendar um Horário\n` +
+              `*2* ➔ Ver Procedimentos e Valores\n` +
+              `*3* ➔ Falar com a Equipe` +
+              linhasCustom +
+              `\n\n_Digite o número da opção desejada:_`;
+          }
+        }
       }
     }
   }
@@ -679,13 +752,16 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       const db = lerBancoCentral();
       const cfg = db.config || {};
       const exigeSinal = cfg.exigir_sinal ?? true;
+      const precoFinal = srv.em_promocao && srv.preco_promocional ? srv.preco_promocional : srv.preco;
+      const srvComPreco = { ...srv, preco: precoFinal };
+
       let valorSinal = 0;
       if (exigeSinal) {
         if (cfg.tipo_sinal === "FIXO") {
           valorSinal = cfg.sinal_valor_fixo ?? 20;
         } else {
           const pct = cfg.sinal_porcentagem ?? 30;
-          valorSinal = Math.round((srv.preco * pct) / 100);
+          valorSinal = Math.round((precoFinal * pct) / 100);
         }
       }
 
@@ -693,7 +769,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       salvarAgendamentoNoPainel({
         cliente_nome: nomeFinal,
         cliente_telefone: telefoneFinal,
-        servico: srv,
+        servico: srvComPreco,
         horario_inicio: dataHoraInicio,
         origem: "WHATSAPP",
         status: exigeSinal ? "AGUARDANDO_SINAL" : "CONFIRMADO",
@@ -703,40 +779,66 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       const dataFormatada = dia.split("-").reverse().slice(0, 2).join("/");
 
       if (exigeSinal) {
-        resposta =
-          `✨ *PRÉ-RESERVA REALIZADA!* ✨\n\n` +
-          `👤 *Cliente:* ${nomeFinal}\n` +
-          `✨ *Procedimento:* ${srv.titulo}\n` +
-          `📅 *Data:* ${dataFormatada} às *${horarioEscolhido}*\n` +
-          `💵 *Valor Total:* ${formatarMoeda(srv.preco)}\n\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `🔒 *CONFIRMAÇÃO DO HORÁRIO (SINAL ANTECIPADO)*\n` +
-          `Para confirmar sua vaga exclusiva na agenda e evitar cancelamentos, solicitamos um adiantamento de segurança:\n\n` +
-          `💰 *Valor do Sinal:* *${formatarMoeda(valorSinal)}*\n` +
-          `_(O restante de ${formatarMoeda(srv.preco - valorSinal)} será pago no dia do atendimento)_\n\n` +
-          `🔑 *CHAVE PIX (Celular):*\n` +
-          `\`${cfg.chave_pix || "82981430673"}\`\n` +
-          `*Titular:* ${cfg.titular_pix || "Luisa Alves dos Santos"}\n\n` +
-          `⏳ *Tempo limite:* Seu horário fica pré-reservado por *${cfg.tempo_limite_sinal_minutos || 30} minutos*.\n` +
-          `Por favor, responda a esta mensagem enviando a *foto ou comprovante* do PIX para confirmarmos seu horário! ✨\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        if (cfg.mensagens_zap?.solicitacao_sinal) {
+          resposta = formatarMensagemZap(cfg.mensagens_zap.solicitacao_sinal, {
+            cliente: nomeFinal,
+            servico: srv.titulo,
+            data: dataFormatada,
+            horario: horarioEscolhido,
+            valor_total: formatarMoeda(precoFinal),
+            valor_sinal: formatarMoeda(valorSinal),
+            valor_restante: formatarMoeda(precoFinal - valorSinal),
+            tipo_chave: "Celular",
+            chave_pix: cfg.chave_pix || "82981430673",
+            titular_pix: cfg.titular_pix || "Luisa Alves dos Santos",
+            tempo_limite: cfg.tempo_limite_sinal_minutos || 30,
+          });
+        } else {
+          resposta =
+            `✨ *PRÉ-RESERVA REALIZADA!* ✨\n\n` +
+            `👤 *Cliente:* ${nomeFinal}\n` +
+            `✨ *Procedimento:* ${srv.titulo}\n` +
+            `📅 *Data:* ${dataFormatada} às *${horarioEscolhido}*\n` +
+            `💵 *Valor Total:* ${formatarMoeda(precoFinal)}\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `🔒 *CONFIRMAÇÃO DO HORÁRIO (SINAL ANTECIPADO)*\n` +
+            `Para confirmar sua vaga exclusiva na agenda e evitar cancelamentos, solicitamos um adiantamento de segurança:\n\n` +
+            `💰 *Valor do Sinal:* *${formatarMoeda(valorSinal)}*\n` +
+            `_(O restante de ${formatarMoeda(precoFinal - valorSinal)} será pago no dia do atendimento)_\n\n` +
+            `🔑 *CHAVE PIX (Celular):*\n` +
+            `\`${cfg.chave_pix || "82981430673"}\`\n` +
+            `*Titular:* ${cfg.titular_pix || "Luisa Alves dos Santos"}\n\n` +
+            `⏳ *Tempo limite:* Seu horário fica pré-reservado por *${cfg.tempo_limite_sinal_minutos || 30} minutos*.\n` +
+            `Por favor, responda a esta mensagem enviando a *foto ou comprovante* do PIX para confirmarmos seu horário! ✨\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        }
         session = {
           step: "AGUARDANDO_COMPROVANTE",
-          servico: srv,
+          servico: srvComPreco,
           valorSinal,
           nomeCliente: nomeFinal,
           horarioEscolhido,
         };
       } else {
-        resposta =
-          `🎉 *AGENDAMENTO CONFIRMADO!* 🎉\n\n` +
-          `👤 *Cliente:* ${nomeFinal}\n` +
-          `✨ *Procedimento:* ${srv.titulo}\n` +
-          `📅 *Data:* ${dataFormatada} às *${horarioEscolhido}*\n` +
-          `💵 *Valor:* ${formatarMoeda(srv.preco)}\n` +
-          `📍 *Local:* Studio Malu Alves Beauty\n\n` +
-          `✅ _Seu horário já foi reservado na agenda da designer! Enviaremos uma mensagem de lembrete 2h antes._\n\n` +
-          `Aguardamos você com muito carinho! ✨`;
+        if (cfg.mensagens_zap?.confirmacao_agendamento) {
+          resposta = formatarMensagemZap(cfg.mensagens_zap.confirmacao_agendamento, {
+            cliente: nomeFinal,
+            servico: srv.titulo,
+            data: dataFormatada,
+            horario: horarioEscolhido,
+            valor_total: formatarMoeda(precoFinal),
+          });
+        } else {
+          resposta =
+            `🎉 *AGENDAMENTO CONFIRMADO!* 🎉\n\n` +
+            `👤 *Cliente:* ${nomeFinal}\n` +
+            `✨ *Procedimento:* ${srv.titulo}\n` +
+            `📅 *Data:* ${dataFormatada} às *${horarioEscolhido}*\n` +
+            `💵 *Valor:* ${formatarMoeda(precoFinal)}\n` +
+            `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+            `✅ _Seu horário já foi reservado na agenda da designer! Enviaremos uma mensagem de lembrete 2h antes._\n\n` +
+            `Aguardamos você com muito carinho! ✨`;
+        }
         session = { step: "INICIAL" };
       }
     } else {
@@ -905,13 +1007,19 @@ async function notificarCancelamentoAdmin(telefone, nomeCliente, dataHora) {
   const dataPart = dataHora ? dataHora.split("T")[0] : "";
   const dataFormatada = dataPart ? dataPart.split("-").reverse().slice(0, 2).join("/") : "hoje";
 
-  const mensagem =
-    `⚠️ *Aviso do Studio Malu Alves Beauty* ⚠️\n\n` +
-    `Olá, *${nomeCliente}*! Infelizmente a designer precisou desmarcar o seu horário de *${dataFormatada}* às *${horaStr}* devido a um imprevisto.\n\n` +
-    `Pedimos sinceras desculpas pelo transtorno! Gostaria de remarcar para outro dia ou horário?\n\n` +
-    `*1* ➔ Sim, ver dias e horários disponíveis\n` +
-    `*2* ➔ Falar com a Designer\n\n` +
-    `_Digite o número da opção desejada para remarcar:_`;
+  const db = lerBancoCentral();
+  const mensagem = db.config?.mensagens_zap?.cancelamento_studio
+    ? formatarMensagemZap(db.config.mensagens_zap.cancelamento_studio, {
+        cliente: nomeCliente,
+        data: dataFormatada,
+        horario: horaStr,
+      })
+    : `⚠️ *Aviso do Studio Malu Alves Beauty* ⚠️\n\n` +
+      `Olá, *${nomeCliente}*! Infelizmente a designer precisou desmarcar o seu horário de *${dataFormatada}* às *${horaStr}* devido a um imprevisto.\n\n` +
+      `Pedimos sinceras desculpas pelo transtorno! Gostaria de remarcar para outro dia ou horário?\n\n` +
+      `*1* ➔ Sim, ver dias e horários disponíveis\n` +
+      `*2* ➔ Falar com a Designer\n\n` +
+      `_Digite o número da opção desejada para remarcar:_`;
 
   console.log(`>>> [Cancelamento] Enviando mensagem para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
@@ -927,19 +1035,29 @@ async function notificarConclusaoAdmin(telefone, nomeCliente, totalVisitas) {
   const visitas = totalVisitas || 1;
   const elegivelDesconto = visitas > 0 && visitas % 5 === 0;
 
-  let mensagemFidelidade = `⭐ Você possui *${visitas} ${visitas === 1 ? "atendimento realizado" : "atendimentos realizados"}* no seu Cartão Fidelidade.`;
-  if (elegivelDesconto) {
-    mensagemFidelidade =
-      `🎉 *PARABÉNS!* Você completou seu 5º atendimento no Cartão Fidelidade!\n` +
-      `🎯 No seu próximo procedimento você tem direito a um *Super Desconto Especial!*`;
-  }
+  const db = lerBancoCentral();
+  let mensagem = "";
 
-  const mensagem =
-    `✨ *Obrigada pela preferência, ${nomeCliente}!* ✨\n\n` +
-    `Foi um imenso prazer atendê-la no Studio Malu Alves Beauty! Esperamos que tenha amado o resultado das suas sobrancelhas.\n\n` +
-    `${mensagemFidelidade}\n\n` +
-    `Quando desejar realçar seu olhar novamente, basta me mandar um *Oi* por aqui! 💖\n` +
-    `Tenha um dia maravilhoso!`;
+  if (db.config?.mensagens_zap?.agradecimento_fidelidade) {
+    mensagem = formatarMensagemZap(db.config.mensagens_zap.agradecimento_fidelidade, {
+      cliente: nomeCliente,
+      visitas,
+    });
+  } else {
+    let mensagemFidelidade = `⭐ Você possui *${visitas} ${visitas === 1 ? "atendimento realizado" : "atendimentos realizados"}* no seu Cartão Fidelidade.`;
+    if (elegivelDesconto) {
+      mensagemFidelidade =
+        `🎉 *PARABÉNS!* Você completou seu 5º atendimento no Cartão Fidelidade!\n` +
+        `🎯 No seu próximo procedimento você tem direito a um *Super Desconto Especial!*`;
+    }
+
+    mensagem =
+      `✨ *Obrigada pela preferência, ${nomeCliente}!* ✨\n\n` +
+      `Foi um imenso prazer atendê-la no Studio Malu Alves Beauty! Esperamos que tenha amado o resultado das suas sobrancelhas.\n\n` +
+      `${mensagemFidelidade}\n\n` +
+      `Quando desejar realçar seu olhar novamente, basta me mandar um *Oi* por aqui! 💖\n` +
+      `Tenha um dia maravilhoso!`;
+  }
 
   console.log(`>>> [Agradecimento] Enviando mensagem para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
@@ -954,13 +1072,19 @@ async function notificarFaltaAdmin(telefone, nomeCliente, servicoTitulo, dataHor
 
   const horaStr = dataHora ? dataHora.split("T")[1]?.slice(0, 5) : "";
 
-  const mensagem =
-    `👋 *Olá, ${nomeCliente}! Tudo bem?*\n\n` +
-    `Notamos que você não conseguiu comparecer ao seu horário de hoje às *${horaStr}* para o procedimento *${servicoTitulo || "Design de Sobrancelhas"}*.\n\n` +
-    `Imprevistos acontecem! Se quiser escolher outro dia ou horário para fazer seu procedimento, é bem fácil:\n\n` +
-    `*1* ➔ Remarcar meu horário agora\n` +
-    `*2* ➔ Falar com a Equipe\n\n` +
-    `_Digite o número desejado:_`;
+  const db = lerBancoCentral();
+  const mensagem = db.config?.mensagens_zap?.falta_comparecimento
+    ? formatarMensagemZap(db.config.mensagens_zap.falta_comparecimento, {
+        cliente: nomeCliente,
+        servico: servicoTitulo,
+        horario: horaStr,
+      })
+    : `👋 *Olá, ${nomeCliente}! Tudo bem?*\n\n` +
+      `Notamos que você não conseguiu comparecer ao seu horário de hoje às *${horaStr}* para o procedimento *${servicoTitulo || "Design de Sobrancelhas"}*.\n\n` +
+      `Imprevistos acontecem! Se quiser escolher outro dia ou horário para fazer seu procedimento, é bem fácil:\n\n` +
+      `*1* ➔ Remarcar meu horário agora\n` +
+      `*2* ➔ Falar com a Equipe\n\n` +
+      `_Digite o número desejado:_`;
 
   console.log(`>>> [Falta] Enviando mensagem de remarcação para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
@@ -980,15 +1104,23 @@ async function notificarConfirmacaoWeb(telefone, nomeCliente, servicoTitulo, dat
   const dataPart = dataHora ? dataHora.split("T")[0] : "";
   const dataFormatada = dataPart ? dataPart.split("-").reverse().slice(0, 2).join("/") : "hoje";
 
-  const mensagem =
-    `🎉 *AGENDAMENTO CONFIRMADO VIA SITE!* ✨\n\n` +
-    `Olá, *${nomeCliente}*! Seu horário foi reservado com sucesso pelo site.\n\n` +
-    `• *Procedimento:* ${servicoTitulo || "Design de Sobrancelhas"}\n` +
-    `• *Data:* ${dataFormatada} às *${horaStr}*\n` +
-    `• *Valor:* ${formatarMoeda(valor || 30)}\n` +
-    `📍 *Local:* Studio Malu Alves Beauty\n\n` +
-    `✅ _Seu horário já está garantido na agenda da designer! Te mandaremos um lembrete 2h antes._\n\n` +
-    `Esperamos por você! ✨`;
+  const db = lerBancoCentral();
+  const mensagem = db.config?.mensagens_zap?.confirmacao_agendamento
+    ? formatarMensagemZap(db.config.mensagens_zap.confirmacao_agendamento, {
+        cliente: nomeCliente,
+        servico: servicoTitulo || "Design de Sobrancelhas",
+        data: dataFormatada,
+        horario: horaStr,
+        valor_total: formatarMoeda(valor || 30),
+      })
+    : `🎉 *AGENDAMENTO CONFIRMADO VIA SITE!* ✨\n\n` +
+      `Olá, *${nomeCliente}*! Seu horário foi reservado com sucesso pelo site.\n\n` +
+      `• *Procedimento:* ${servicoTitulo || "Design de Sobrancelhas"}\n` +
+      `• *Data:* ${dataFormatada} às *${horaStr}*\n` +
+      `• *Valor:* ${formatarMoeda(valor || 30)}\n` +
+      `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+      `✅ _Seu horário já está garantido na agenda da designer! Te mandaremos um lembrete 2h antes._\n\n` +
+      `Esperamos por você! ✨`;
 
   console.log(`>>> [Confirmacao Web] Enviando comprovante para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
@@ -1013,23 +1145,37 @@ async function notificarSolicitacaoSinalWeb(dados) {
   const valorSinalNum = Number(valorSinal) || Math.round(valorTotalNum * 0.3);
   const restanteNum = Math.max(valorTotalNum - valorSinalNum, 0);
 
-  const mensagem =
-    `✨ *PRÉ-RESERVA REALIZADA COM SUCESSO!* ✨\n\n` +
-    `Olá, *${nome || "Cliente"}*! Recebemos sua solicitação de agendamento pelo site do Studio Malu Alves Beauty.\n\n` +
-    `• *Procedimento:* ${servicoTitulo || "Design de Sobrancelhas"}\n` +
-    `• *Data:* ${dataFormatada} às *${horaStr}*\n` +
-    `• *Valor Total:* ${formatarMoeda(valorTotalNum)}\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `🔒 *CONFIRMAÇÃO DO AGENDAMENTO (SINAL ANTECIPADO)*\n` +
-    `Para garantir com exclusividade a sua vaga na agenda da designer e evitar cancelamentos, solicitamos um adiantamento de segurança:\n\n` +
-    `💰 *Valor do Sinal:* *${formatarMoeda(valorSinalNum)}*\n` +
-    `_(O restante de ${formatarMoeda(restanteNum)} será pago no dia do seu atendimento)_\n\n` +
-    `🔑 *CHAVE PIX (Celular):*\n` +
-    `\`${chavePix || "82981430673"}\`\n` +
-    `*Titular:* ${titularPix || "Luisa Alves dos Santos"}\n\n` +
-    `⏳ *Tempo limite:* Seu horário fica reservado por *${tempoLimiteMinutos || 30} minutos*.\n` +
-    `Por favor, responda a esta mensagem enviando a *foto ou comprovante* do PIX para que o robô confirme seu horário automaticamente! ✨\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+  const db = lerBancoCentral();
+  const mensagem = db.config?.mensagens_zap?.solicitacao_sinal
+    ? formatarMensagemZap(db.config.mensagens_zap.solicitacao_sinal, {
+        cliente: nome || "Cliente",
+        servico: servicoTitulo || "Design de Sobrancelhas",
+        data: dataFormatada,
+        horario: horaStr,
+        valor_total: formatarMoeda(valorTotalNum),
+        valor_sinal: formatarMoeda(valorSinalNum),
+        valor_restante: formatarMoeda(restanteNum),
+        tipo_chave: "Celular",
+        chave_pix: chavePix || "82981430673",
+        titular_pix: titularPix || "Luisa Alves dos Santos",
+        tempo_limite: tempoLimiteMinutos || 30,
+      })
+    : `✨ *PRÉ-RESERVA REALIZADA COM SUCESSO!* ✨\n\n` +
+      `Olá, *${nome || "Cliente"}*! Recebemos sua solicitação de agendamento pelo site do Studio Malu Alves Beauty.\n\n` +
+      `• *Procedimento:* ${servicoTitulo || "Design de Sobrancelhas"}\n` +
+      `• *Data:* ${dataFormatada} às *${horaStr}*\n` +
+      `• *Valor Total:* ${formatarMoeda(valorTotalNum)}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔒 *CONFIRMAÇÃO DO AGENDAMENTO (SINAL ANTECIPADO)*\n` +
+      `Para garantir com exclusividade a sua vaga na agenda da designer e evitar cancelamentos, solicitamos um adiantamento de segurança:\n\n` +
+      `💰 *Valor do Sinal:* *${formatarMoeda(valorSinalNum)}*\n` +
+      `_(O restante de ${formatarMoeda(restanteNum)} será pago no dia do seu atendimento)_\n\n` +
+      `🔑 *CHAVE PIX (Celular):*\n` +
+      `\`${chavePix || "82981430673"}\`\n` +
+      `*Titular:* ${titularPix || "Luisa Alves dos Santos"}\n\n` +
+      `⏳ *Tempo limite:* Seu horário fica reservado por *${tempoLimiteMinutos || 30} minutos*.\n` +
+      `Por favor, responda a esta mensagem enviando a *foto ou comprovante* do PIX para que o robô confirme seu horário automaticamente! ✨\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
   console.log(`>>> [Sinal Web] Enviando solicitação de PIX para ${targetJid} (${nome})...`);
   userSessions.set(targetJid, {

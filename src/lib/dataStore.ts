@@ -87,6 +87,16 @@ export const DataStore = {
     const atualizado = { ...atual, ...config };
     setLocal(KEYS.CONFIG, atualizado);
 
+    try {
+      await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(atualizado),
+      });
+    } catch (e) {
+      console.error("Erro ao sincronizar config via API:", e);
+    }
+
     if (isSupabaseConfigured && supabase) {
       await supabase.from("barbearia_config").upsert(atualizado);
     }
@@ -275,6 +285,22 @@ export const DataStore = {
       await supabase.from("clientes").upsert(clienteAtualizado);
     }
     return clienteAtualizado;
+  },
+
+  async limparClientes(): Promise<void> {
+    setLocal(KEYS.CLIENTES, []);
+    try {
+      await fetch("/api/clientes", { method: "DELETE" });
+    } catch (e) {
+      console.error("Erro ao limpar clientes via API:", e);
+    }
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from("clientes").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      } catch (e) {
+        console.error("Erro ao limpar clientes no Supabase:", e);
+      }
+    }
   },
 
   // 6. AGENDAMENTOS

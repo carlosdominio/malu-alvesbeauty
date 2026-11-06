@@ -9,16 +9,23 @@ import {
   DollarSign,
   Calendar,
   Sparkles,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { Cliente } from "@/types";
+import { DataStore } from "@/lib/dataStore";
 import { formatarMoeda, formatarTelefone, formatarDataHora } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busca, setBusca] = useState("");
   const [loading, setLoading] = useState(true);
+  const [modalLimparAberto, setModalLimparAberto] = useState(false);
+  const [limpando, setLimpando] = useState(false);
 
   useEffect(() => {
     async function carregar() {
@@ -43,6 +50,19 @@ export default function ClientesPage() {
       c.telefone.includes(busca)
   );
 
+  const handleLimparHistorico = async () => {
+    setLimpando(true);
+    try {
+      await DataStore.limparClientes();
+      setClientes([]);
+      setModalLimparAberto(false);
+    } catch (err) {
+      console.error("Erro ao limpar histórico:", err);
+    } finally {
+      setLimpando(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -60,16 +80,32 @@ export default function ClientesPage() {
           </p>
         </div>
 
-        {/* Busca */}
-        <div className="relative max-w-xs w-full">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Buscar por nome ou WhatsApp..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 font-medium"
-          />
+        {/* Busca e Botão de Limpar */}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Buscar por nome ou WhatsApp..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 font-medium"
+            />
+          </div>
+
+          {clientes.length > 0 && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setModalLimparAberto(true)}
+              className="flex items-center gap-1.5 text-xs font-bold shrink-0"
+              title="Limpar Histórico de Clientes"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Limpar Histórico</span>
+              <span className="sm:hidden">Limpar</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -215,6 +251,47 @@ export default function ClientesPage() {
           })}
         </div>
       )}
+
+      {/* Modal de Confirmação de Limpeza de Histórico */}
+      <Modal
+        isOpen={modalLimparAberto}
+        onClose={() => setModalLimparAberto(false)}
+        title="Limpar Histórico de Clientes?"
+        description="Esta ação removerá todos os clientes e dados acumulados de fidelidade."
+        icon={<AlertTriangle className="w-5 h-5 text-red-400" />}
+        maxWidth="sm"
+      >
+        <div className="space-y-4">
+          <div className="p-4 rounded-2xl bg-red-950/20 border border-red-500/30 text-xs text-red-300 leading-relaxed space-y-2">
+            <p className="font-bold text-red-200">
+              ⚠️ Atenção: Esta ação não pode ser desfeita!
+            </p>
+            <p>
+              Todos os {clientes.length} clientes cadastrados, histórico de atendimentos e contadores do Cartão Fidelidade serão reiniciados para que você comece com o painel 100% limpo.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2">
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => setModalLimparAberto(false)}
+              className="flex-1 text-zinc-400 hover:text-white"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={handleLimparHistorico}
+              loading={limpando}
+              className="flex-1 font-bold shadow-lg shadow-red-500/20"
+            >
+              Sim, Limpar Tudo
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -20,6 +20,8 @@ export default function ServicosPage() {
   const [descricao, setDescricao] = useState("");
   const [preco, setPreco] = useState("");
   const [duracao, setDuracao] = useState("30");
+  const [emPromocao, setEmPromocao] = useState(false);
+  const [precoPromocional, setPrecoPromocional] = useState("");
 
   const carregarServicos = async () => {
     setLoading(true);
@@ -38,6 +40,8 @@ export default function ServicosPage() {
     setDescricao("");
     setPreco("");
     setDuracao("30");
+    setEmPromocao(false);
+    setPrecoPromocional("");
     setModalAberto(true);
   };
 
@@ -47,18 +51,25 @@ export default function ServicosPage() {
     setDescricao(s.descricao || "");
     setPreco(String(s.preco));
     setDuracao(String(s.duracao_minutos));
+    setEmPromocao(s.em_promocao ?? false);
+    setPrecoPromocional(s.preco_promocional ? String(s.preco_promocional) : "");
     setModalAberto(true);
   };
 
   const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
+    const precoNum = parseFloat(preco.replace(",", "."));
+    const precoPromoNum = emPromocao && precoPromocional ? parseFloat(precoPromocional.replace(",", ".")) : undefined;
+
     await DataStore.saveServico({
       id: editandoServico?.id,
       titulo,
       descricao,
-      preco: parseFloat(preco.replace(",", ".")),
+      preco: precoNum,
       duracao_minutos: parseInt(duracao, 10),
       ativo: editandoServico ? editandoServico.ativo : true,
+      em_promocao: emPromocao,
+      preco_promocional: precoPromoNum,
     });
     setModalAberto(false);
     carregarServicos();
@@ -123,9 +134,25 @@ export default function ServicosPage() {
                     </div>
                   </div>
 
-                  <span className="text-base font-black text-amber-400">
-                    {formatarMoeda(s.preco)}
-                  </span>
+                  {s.em_promocao && s.preco_promocional ? (
+                    <div className="text-right">
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <span className="text-xs line-through text-zinc-500 font-bold">
+                          {formatarMoeda(s.preco)}
+                        </span>
+                        <span className="text-base font-black text-amber-400">
+                          {formatarMoeda(s.preco_promocional)}
+                        </span>
+                      </div>
+                      <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 inline-block mt-0.5">
+                        🔥 Em Promoção
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-base font-black text-amber-400">
+                      {formatarMoeda(s.preco)}
+                    </span>
+                  )}
                 </div>
 
                 {s.descricao && (
@@ -238,6 +265,46 @@ export default function ServicosPage() {
                 <option value="90">1h30</option>
               </select>
             </div>
+          </div>
+
+          {/* Opção de Promoção */}
+          <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold text-zinc-200 block">Ativar Preço Promocional?</label>
+                <p className="text-[11px] text-zinc-400">
+                  Destaca o serviço no catálogo e no robô do WhatsApp com valor promocional.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={emPromocao}
+                onChange={(e) => setEmPromocao(e.target.checked)}
+                className="w-5 h-5 rounded-lg accent-amber-500 cursor-pointer"
+              />
+            </div>
+
+            {emPromocao && (
+              <div className="pt-2 border-t border-zinc-800/80 space-y-2 animate-in fade-in duration-200">
+                <label className="text-xs font-bold text-amber-400 block">
+                  Valor Promocional (R$)
+                </label>
+                <input
+                  type="number"
+                  step="0.50"
+                  required={emPromocao}
+                  value={precoPromocional}
+                  onChange={(e) => setPrecoPromocional(e.target.value)}
+                  placeholder="Ex: 25.00"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-amber-500/40 text-sm text-zinc-100 focus:outline-none focus:border-amber-400 font-bold"
+                />
+                {preco && precoPromocional && parseFloat(precoPromocional) < parseFloat(preco) && (
+                  <p className="text-[11px] text-emerald-400 font-medium">
+                    ✨ Economia de {formatarMoeda(parseFloat(preco) - parseFloat(precoPromocional))} ({Math.round(((parseFloat(preco) - parseFloat(precoPromocional)) / parseFloat(preco)) * 100)}% de desconto para as clientes)
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <Button type="submit" variant="gold" size="lg" className="w-full font-bold">

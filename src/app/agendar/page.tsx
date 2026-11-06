@@ -216,7 +216,11 @@ export default function AgendarPage() {
 
   // Handler de seleção de serviço
   const handleSelecionarServico = (servico: Servico) => {
-    setServicoSelecionado(servico);
+    const servicoFinal =
+      servico.em_promocao && servico.preco_promocional
+        ? { ...servico, preco: servico.preco_promocional }
+        : servico;
+    setServicoSelecionado(servicoFinal);
     setPasso(2);
   };
 
@@ -648,29 +652,37 @@ export default function AgendarPage() {
             <div className="space-y-3">
               {servicos.map((servico) => {
                 const ehCombo = servico.titulo.toLowerCase().includes("combo");
+                const ehPromo = Boolean(servico.em_promocao && servico.preco_promocional && servico.preco_promocional < servico.preco);
                 return (
                   <div
                     key={servico.id}
                     onClick={() => handleSelecionarServico(servico)}
                     className={cn(
                       "group relative p-4 rounded-2xl bg-zinc-900 border transition-all duration-150 cursor-pointer select-none active:scale-[0.99]",
-                      ehCombo
+                      ehPromo
+                        ? "border-amber-500/50 hover:border-amber-400 bg-gradient-to-r from-zinc-900 via-zinc-900 to-amber-950/30 shadow-md shadow-amber-500/10"
+                        : ehCombo
                         ? "border-amber-500/40 hover:border-amber-400 bg-gradient-to-r from-zinc-900 via-zinc-900 to-amber-950/20"
                         : "border-zinc-800/90 hover:border-zinc-700 hover:bg-zinc-850"
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-bold text-zinc-100 text-sm group-hover:text-amber-400 transition-colors">
                             {servico.titulo}
                           </h3>
-                          {ehCombo && (
+                          {ehPromo ? (
+                            <span className="text-[10px] uppercase font-black tracking-wider bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/40 flex items-center gap-1 shadow-sm shadow-amber-500/20 animate-pulse">
+                              <Flame className="w-3 h-3 text-amber-400" />
+                              Promoção Especial
+                            </span>
+                          ) : ehCombo ? (
                             <span className="text-[10px] uppercase font-extrabold tracking-wider bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
                               <Flame className="w-3 h-3" />
                               Mais Pedido
                             </span>
-                          )}
+                          ) : null}
                         </div>
 
                         {servico.descricao && (
@@ -680,9 +692,20 @@ export default function AgendarPage() {
                         )}
 
                         <div className="flex items-center gap-3 mt-3">
-                          <span className="text-sm font-black text-amber-400">
-                            {formatarMoeda(servico.preco)}
-                          </span>
+                          {ehPromo && servico.preco_promocional ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs line-through text-zinc-500 font-bold">
+                                {formatarMoeda(servico.preco)}
+                              </span>
+                              <span className="text-sm font-black text-amber-400">
+                                {formatarMoeda(servico.preco_promocional)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-sm font-black text-amber-400">
+                              {formatarMoeda(servico.preco)}
+                            </span>
+                          )}
                           <span className="text-[11px] text-zinc-400 flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5 text-zinc-400" />
                             {servico.duracao_minutos} min
