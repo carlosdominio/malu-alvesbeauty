@@ -59,6 +59,19 @@ function setLocal<T>(key: string, data: T): void {
   }
 }
 
+// Limpeza automática de dados mockados antigos no navegador do usuário
+if (typeof window !== "undefined") {
+  try {
+    const version = localStorage.getItem("barber_os_storage_version");
+    if (version !== "v3_clean_start") {
+      localStorage.setItem(KEYS.AGENDAMENTOS, JSON.stringify([]));
+      localStorage.setItem(KEYS.CLIENTES, JSON.stringify([]));
+      localStorage.setItem(KEYS.BLOQUEIOS, JSON.stringify([]));
+      localStorage.setItem("barber_os_storage_version", "v3_clean_start");
+    }
+  } catch {}
+}
+
 export const DataStore = {
   // 1. CONFIGURAÇÃO DA BARBEARIA
   async getConfig(): Promise<BarbeariaConfig> {
@@ -200,6 +213,19 @@ export const DataStore = {
 
   // 5. CLIENTES & DETECÇÃO DE CLIENTE RECORRENTE
   async getClientes(): Promise<Cliente[]> {
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch("/api/clientes", { cache: "no-store" });
+        if (res.ok) {
+          const dados = await res.json();
+          if (Array.isArray(dados)) {
+            setLocal(KEYS.CLIENTES, dados);
+            return dados;
+          }
+        }
+      } catch {}
+    }
+
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase.from("clientes").select("*").order("ultima_visita", { ascending: false });
       if (!error && data && data.length > 0) return data as Cliente[];
@@ -253,6 +279,20 @@ export const DataStore = {
 
   // 6. AGENDAMENTOS
   async getAgendamentos(dataFiltro?: string): Promise<Agendamento[]> {
+    if (typeof window !== "undefined") {
+      try {
+        const url = dataFiltro ? `/api/agendamentos?data=${dataFiltro}` : `/api/agendamentos`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (res.ok) {
+          const dados = await res.json();
+          if (Array.isArray(dados)) {
+            setLocal(KEYS.AGENDAMENTOS, dados);
+            return dados.sort((a, b) => a.horario_inicio.localeCompare(b.horario_inicio));
+          }
+        }
+      } catch {}
+    }
+
     let lista: Agendamento[] = [];
 
     if (isSupabaseConfigured && supabase) {

@@ -7,7 +7,13 @@
     "antecedencia_minima_cancelamento_horas": 2,
     "limite_maximo_agendamentos_dia": 15,
     "mensagem_boas_vindas": "Bem-vinda ao Studio Malu Alves Beauty! Agende seu horário com praticidade.",
-    "chave_pix": "pix@malualvesbeauty.com.br",
+    "chave_pix": "82981430673",
+    "titular_pix": "Luisa Alves dos Santos",
+    "exigir_sinal": true,
+    "tipo_sinal": "PORCENTAGEM",
+    "sinal_porcentagem": 30,
+    "sinal_valor_fixo": 20,
+    "tempo_limite_sinal_minutos": 30,
     "regra_fidelidade_cortes": 5,
     "porcentagem_desconto_fidelidade": 20,
     "auto_limpeza_cancelados_dias": 7,
@@ -115,36 +121,7 @@
       "ativo": true
     }
   ],
-  "agendamentos": [
-    {
-      "id": "ag-1793896198004",
-      "cliente_id": "cli-1787340520735",
-      "cliente_nome": "Carlos Leonidio",
-      "cliente_telefone": "115328914817201",
-      "servico_id": "serv-2",
-      "servico_titulo": "Design com Henna",
-      "horario_inicio": "2026-11-05T15:30:00",
-      "horario_fim": "2026-11-05T16:15:00",
-      "duracao_minutos": 45,
-      "status": "CONFIRMADO",
-      "origem": "WHATSAPP",
-      "valor_cobrado": 45,
-      "created_at": "2026-11-05T16:29:58.004Z"
-    }
-  ],
-  "clientes": [
-    {
-      "id": "cli-1787340520735",
-      "nome": "Carlos Leonidio",
-      "telefone": "115328914817201",
-      "ultimo_servico_id": "serv-2",
-      "ultimo_servico_nome": "Design com Henna",
-      "ultima_visita": "2026-11-05T15:30:00",
-      "total_visitas": 3,
-      "total_gasto": 90,
-      "historico_visitas": [],
-      "created_at": "2026-11-05T16:29:58.004Z"
-    }
-  ],
+  "agendamentos": [],
+  "clientes": [],
   "bloqueios": []
 }
