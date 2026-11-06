@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Scissors, Pencil, Trash2, Check, X } from "lucide-react";
+import { Plus, Sparkles, Pencil, Trash2, Check, X } from "lucide-react";
 import { Servico } from "@/types";
 import { DataStore } from "@/lib/dataStore";
 import { formatarMoeda, cn } from "@/lib/utils";
@@ -114,7 +114,7 @@ export default function ServicosPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
-                      <Scissors className="w-4 h-4" />
+                      <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
                       <h3 className="font-bold text-zinc-100 text-base">{s.titulo}</h3>
@@ -176,7 +176,9 @@ export default function ServicosPage() {
       <Modal
         isOpen={modalAberto}
         onClose={() => setModalAberto(false)}
-        title={editandoServico ? "Editar Serviço" : "Novo Serviço"}
+        title={editandoServico ? "Editar Procedimento" : "Novo Procedimento"}
+        description="Defina os detalhes, valor e tempo de atendimento do serviço"
+        icon={<Sparkles className="w-5 h-5 text-amber-400" />}
       >
         <form onSubmit={handleSalvar} className="space-y-4">
           <div>

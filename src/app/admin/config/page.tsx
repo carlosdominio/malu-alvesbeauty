@@ -368,6 +368,8 @@ export default function ConfigPage() {
         isOpen={modalLimparAberto}
         onClose={() => setModalLimparAberto(false)}
         title="Zerar Agendamentos de Teste"
+        description="Atenção: esta ação apagará os atendimentos de teste"
+        icon={<Trash2 className="w-5 h-5 text-red-400" />}
       >
         <div className="space-y-4">
           <div className="p-4 rounded-2xl bg-red-950/20 border border-red-900/40 flex items-start gap-3">

@@ -72,14 +72,6 @@ export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = f
         <div className="flex items-center gap-2">
           {isAdmin ? (
             <div className="flex items-center gap-2">
-              <Link
-                href="/admin/config"
-                className="md:hidden flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-300 hover:text-amber-400 bg-zinc-900 border border-zinc-800 transition-colors"
-                title="Configurações"
-              >
-                <Settings className="w-3.5 h-3.5 text-amber-500" />
-                <span>Config</span>
-              </Link>
               <button
                 type="button"
                 onClick={() => {
@@ -87,7 +79,7 @@ export function Header({ nomeBarbearia = "Studio Malu Alves Beauty", isAdmin = f
                   document.cookie = "malu_admin_auth=; path=/; max-age=0";
                   window.location.href = "/admin/login";
                 }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl border border-zinc-800 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl border border-zinc-800 transition-colors"
                 title="Sair do Painel"
               >
                 <LogOut className="w-4 h-4" />

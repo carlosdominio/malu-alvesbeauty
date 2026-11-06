@@ -2,25 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, DollarSign, Sparkles, Users, MessageSquare, Clock, Settings } from "lucide-react";
+import { Calendar, DollarSign, Users, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function BottomNav() {
   const pathname = usePathname();
 
+  // Os 4 botões mais importantes para a operação diária no mobile
   const items = [
     { href: "/admin", label: "Agenda", icon: Calendar },
-    { href: "/admin/whatsapp", label: "Whats", icon: MessageSquare },
-    { href: "/admin/financeiro", label: "Finanças", icon: DollarSign },
-    { href: "/admin/servicos", label: "Serviços", icon: Sparkles },
+    { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
+    { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign },
     { href: "/admin/clientes", label: "Clientes", icon: Users },
-    { href: "/admin/horarios", label: "Horários", icon: Clock },
-    { href: "/admin/config", label: "Config", icon: Settings },
   ];
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-zinc-950/95 border-t border-zinc-800/80 backdrop-blur-lg px-1 py-1.5 shadow-2xl">
-      <div className="grid grid-cols-7 items-center justify-items-center">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-zinc-950/95 border-t border-zinc-800/80 backdrop-blur-lg px-2 py-1.5 shadow-2xl safe-area-pb">
+      <div className="grid grid-cols-4 items-center justify-items-center">
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -29,18 +27,25 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center py-1 px-0.5 w-full rounded-xl transition-all",
+                "flex flex-col items-center justify-center py-1.5 px-2 w-full rounded-2xl transition-all select-none",
                 isActive
-                  ? "text-amber-400 font-bold scale-105"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "text-amber-400 font-extrabold bg-amber-500/10 border border-amber-500/20 scale-105"
+                  : "text-zinc-400 hover:text-zinc-200 active:scale-95"
               )}
             >
-              <Icon className={cn("w-4 h-4 mb-0.5", isActive ? "stroke-[2.5]" : "stroke-2")} />
-              <span className="text-[9px] truncate max-w-full text-center leading-tight">{item.label}</span>
+              <Icon
+                className={cn(
+                  "w-5 h-5 mb-0.5 transition-transform",
+                  isActive ? "stroke-[2.5] scale-110" : "stroke-2"
+                )}
+              />
+              <span className="text-[11px] truncate max-w-full text-center leading-tight">
+                {item.label}
+              </span>
             </Link>
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }

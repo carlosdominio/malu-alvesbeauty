@@ -15,6 +15,8 @@ import {
   Clock,
   CheckCheck,
   XCircle,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { Agendamento, BarbeariaConfig, Cliente, FormaPagamento, Servico, StatusAgendamento } from "@/types";
 import { DataStore } from "@/lib/dataStore";
@@ -45,6 +47,11 @@ export default function AgendaPage() {
   const [modalConcluirAberto, setModalConcluirAberto] = useState(false);
   const [agendamentoParaConcluir, setAgendamentoParaConcluir] = useState<Agendamento | null>(null);
   const [formaPagamentoSelecionada, setFormaPagamentoSelecionada] = useState<FormaPagamento>("PIX");
+  const [confirmarStatusModal, setConfirmarStatusModal] = useState<{
+    aberto: boolean;
+    agendamento: Agendamento | null;
+    novoStatus: "CANCELADO" | "FALTOU" | null;
+  }>({ aberto: false, agendamento: null, novoStatus: null });
 
   // Form de Bloqueio
   const [bloqueioMotivo, setBloqueioMotivo] = useState("Pausa / Almoço");
@@ -622,7 +629,13 @@ export default function AgendaPage() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => handleStatusChange(ag.id, "FALTOU")}
+                        onClick={() =>
+                          setConfirmarStatusModal({
+                            aberto: true,
+                            agendamento: ag,
+                            novoStatus: "FALTOU",
+                          })
+                        }
                         className="text-xs text-amber-400 hover:text-amber-300"
                       >
                         Faltou
@@ -631,7 +644,13 @@ export default function AgendaPage() {
                       <Button
                         variant="danger"
                         size="sm"
-                        onClick={() => handleStatusChange(ag.id, "CANCELADO")}
+                        onClick={() =>
+                          setConfirmarStatusModal({
+                            aberto: true,
+                            agendamento: ag,
+                            novoStatus: "CANCELADO",
+                          })
+                        }
                         className="text-xs"
                       >
                         Cancelar
@@ -660,51 +679,153 @@ export default function AgendaPage() {
       <Modal
         isOpen={modalConcluirAberto}
         onClose={() => setModalConcluirAberto(false)}
-        title="Concluir Atendimento"
+        title="Finalizar Atendimento"
+        description="Confirme o recebimento e selecione a forma de pagamento"
+        icon={<CheckCircle2 className="w-5 h-5 text-emerald-400" />}
       >
         {agendamentoParaConcluir && (
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800">
-              <p className="text-xs text-zinc-400">Cliente:</p>
-              <h4 className="font-bold text-zinc-100">{agendamentoParaConcluir.cliente_nome}</h4>
-              <p className="text-xs text-amber-400 font-semibold mt-1">
-                {agendamentoParaConcluir.servico_titulo} •{" "}
-                {formatarMoeda(agendamentoParaConcluir.valor_cobrado)}
-              </p>
-            </div>
+          <div className="space-y-5">
+            {/* Card Elegante do Atendimento */}
+            <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800/90 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] uppercase tracking-wider font-extrabold text-amber-500">
+                  {agendamentoParaConcluir.servico_titulo}
+                </span>
+                <h4 className="font-extrabold text-white text-base mt-0.5">
+                  {agendamentoParaConcluir.cliente_nome}
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {formatarTelefone(agendamentoParaConcluir.cliente_telefone)}
+                </p>
+              </div>
 
-            <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-2">
-                Como o cliente pagou?
-              </label>
-
-              <div className="grid grid-cols-3 gap-2">
-                {(["PIX", "DINHEIRO", "CARTAO"] as FormaPagamento[]).map((forma) => (
-                  <button
-                    key={forma}
-                    type="button"
-                    onClick={() => setFormaPagamentoSelecionada(forma)}
-                    className={cn(
-                      "py-3 rounded-xl border text-xs font-bold transition-all",
-                      formaPagamentoSelecionada === forma
-                        ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/20"
-                        : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-750"
-                    )}
-                  >
-                    {forma === "PIX" ? "⚡ Pix" : forma === "DINHEIRO" ? "💵 Dinheiro" : "💳 Cartão"}
-                  </button>
-                ))}
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">
+                  Total
+                </span>
+                <p className="text-xl font-black text-amber-400 mt-0.5">
+                  {formatarMoeda(agendamentoParaConcluir.valor_cobrado)}
+                </p>
               </div>
             </div>
 
-            <Button
-              variant="gold"
-              size="lg"
-              className="w-full font-bold mt-2"
-              onClick={confirmarConclusao}
-            >
-              Confirmar Recebimento • {formatarMoeda(agendamentoParaConcluir.valor_cobrado)}
-            </Button>
+            {/* Seleção de Forma de Pagamento */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-2.5">
+                Como o cliente pagou?
+              </label>
+
+              <div className="grid grid-cols-3 gap-2.5">
+                {(
+                  [
+                    { id: "PIX", label: "Pix", icon: "⚡" },
+                    { id: "CARTAO", label: "Cartão", icon: "💳" },
+                    { id: "DINHEIRO", label: "Dinheiro", icon: "💵" },
+                  ] as { id: FormaPagamento; label: string; icon: string }[]
+                ).map((forma) => {
+                  const isSel = formaPagamentoSelecionada === forma.id;
+                  return (
+                    <button
+                      key={forma.id}
+                      type="button"
+                      onClick={() => setFormaPagamentoSelecionada(forma.id)}
+                      className={cn(
+                        "py-3.5 px-3 rounded-2xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 select-none",
+                        isSel
+                          ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-lg shadow-amber-500/25 scale-[1.02]"
+                          : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-850"
+                      )}
+                    >
+                      <span className="text-base">{forma.icon}</span>
+                      <span>{forma.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Ações */}
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={() => setModalConcluirAberto(false)}
+                className="text-zinc-400 hover:text-white"
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="gold"
+                size="md"
+                className="flex-1 font-black shadow-lg shadow-amber-500/20"
+                onClick={confirmarConclusao}
+              >
+                <span>Confirmar Recebimento</span>
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL CONFIRMAÇÃO DE FALTA OU CANCELAMENTO */}
+      <Modal
+        isOpen={confirmarStatusModal.aberto}
+        onClose={() => setConfirmarStatusModal({ aberto: false, agendamento: null, novoStatus: null })}
+        title={confirmarStatusModal.novoStatus === "FALTOU" ? "Marcar Falta do Cliente?" : "Cancelar Agendamento?"}
+        description={
+          confirmarStatusModal.novoStatus === "FALTOU"
+            ? "O atendimento será registrado como falta no histórico do cliente."
+            : "O horário será liberado imediatamente para novos agendamentos."
+        }
+        icon={
+          confirmarStatusModal.novoStatus === "FALTOU" ? (
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+          ) : (
+            <XCircle className="w-5 h-5 text-red-400" />
+          )
+        }
+      >
+        {confirmarStatusModal.agendamento && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800/80 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-zinc-400 font-medium">Cliente</p>
+                <h4 className="font-bold text-zinc-100 text-sm">{confirmarStatusModal.agendamento.cliente_nome}</h4>
+                <p className="text-xs text-amber-400 font-semibold mt-0.5">
+                  {confirmarStatusModal.agendamento.servico_titulo}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-zinc-400 font-medium">Horário</span>
+                <p className="text-sm font-extrabold text-zinc-200">
+                  {confirmarStatusModal.agendamento.horario_inicio.split("T")[1]?.slice(0, 5)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={() => setConfirmarStatusModal({ aberto: false, agendamento: null, novoStatus: null })}
+                className="flex-1 text-zinc-400 hover:text-white"
+              >
+                Voltar
+              </Button>
+              <Button
+                variant={confirmarStatusModal.novoStatus === "FALTOU" ? "gold" : "danger"}
+                size="md"
+                onClick={async () => {
+                  if (confirmarStatusModal.agendamento && confirmarStatusModal.novoStatus) {
+                    await handleStatusChange(confirmarStatusModal.agendamento.id, confirmarStatusModal.novoStatus);
+                    setConfirmarStatusModal({ aberto: false, agendamento: null, novoStatus: null });
+                  }
+                }}
+                className="flex-1 font-bold"
+              >
+                {confirmarStatusModal.novoStatus === "FALTOU" ? "Confirmar Falta" : "Sim, Cancelar"}
+              </Button>
+            </div>
           </div>
         )}
       </Modal>
@@ -714,6 +835,8 @@ export default function AgendaPage() {
         isOpen={modalBloqueioAberto}
         onClose={() => setModalBloqueioAberto(false)}
         title="Bloquear Horário na Agenda"
+        description="Impeça novos agendamentos online neste intervalo selecionado"
+        icon={<Ban className="w-5 h-5 text-amber-500" />}
       >
         <form onSubmit={handleSalvarBloqueio} className="space-y-4">
           <div>
@@ -762,7 +885,9 @@ export default function AgendaPage() {
       <Modal
         isOpen={modalNovoAgendamentoAberto}
         onClose={() => setModalNovoAgendamentoAberto(false)}
-        title="Agendamento Manual (Balcão / Telefone)"
+        title="Novo Agendamento Manual"
+        description="Cadastre um atendimento presencial ou agendado por telefone"
+        icon={<Plus className="w-5 h-5 text-amber-500" />}
       >
         <form onSubmit={handleCriarAgendamentoManual} className="space-y-4">
           <div>

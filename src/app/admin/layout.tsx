@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
+import { AdminTopNav } from "@/components/AdminTopNav";
 import { BottomNav } from "@/components/BottomNav";
 import { ToastProvider } from "@/components/ui/Toast";
 import { DataStore } from "@/lib/dataStore";
@@ -58,6 +59,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <ToastProvider>
       <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col pb-20 md:pb-8 selection:bg-amber-500 selection:text-zinc-950">
         <Header nomeBarbearia={config?.nome_barbearia} isAdmin={true} />
+        <AdminTopNav />
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6">{children}</main>
         <BottomNav />
       </div>
