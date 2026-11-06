@@ -45,6 +45,7 @@ export default function RootLayout({
         <link rel="icon" href="/logo.jpg" type="image/jpeg" />
         <link rel="shortcut icon" href="/logo.jpg" type="image/jpeg" />
         <link rel="apple-touch-icon" href="/logo.jpg" />
+        <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className="antialiased bg-zinc-950 text-zinc-100 min-h-screen">
         {children}
@@ -52,11 +53,19 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
-                    console.log('SW registration failed:', err);
+                if (window.location.pathname.startsWith('/admin')) {
+                  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    for (var r of registrations) {
+                      r.unregister();
+                    }
                   });
-                });
+                } else {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                      console.log('SW registration failed:', err);
+                    });
+                  });
+                }
               }
             `,
           }}

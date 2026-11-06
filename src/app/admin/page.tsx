@@ -106,9 +106,17 @@ export default function AgendaPage() {
         DataStore.getBloqueios(),
       ]);
 
+      let ags: Agendamento[] = [];
       if (resAg.ok) {
-        const ags: Agendamento[] = await resAg.json();
+        try {
+          ags = await resAg.json();
+        } catch {}
+      }
+      if (!Array.isArray(ags) || ags.length === 0) {
+        ags = await DataStore.getAgendamentos();
+      }
 
+      if (ags && ags.length >= 0) {
         // Verificar novos agendamentos para disparo de notificação sonora
         if (primeiraCargaRef.current) {
           const mapaInicial = new Map<string, StatusAgendamento>();
@@ -372,21 +380,48 @@ export default function AgendaPage() {
       return;
     }
 
-    await fetch("/api/agendamentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    let novoAgCriado: Agendamento | null = null;
+    try {
+      novoAgCriado = await DataStore.createAgendamento({
         cliente_nome: novoNome,
         cliente_telefone: novoTelefone,
         servico,
         horario_inicio: `${dataAlvoManual}T${novoHorario}:00`,
         origem: "MANUAL",
         status: statusFinal,
-        forma_pagamento: novoTipoFluxo === "CONCLUIDO" ? novoFormaPagamento : "PIX",
         valor_sinal: valorSinalManual,
         observacoes: observacoesFinal || undefined,
-      }),
-    });
+      });
+    } catch (e) {
+      console.warn("Erro ao salvar no DataStore local:", e);
+    }
+
+    try {
+      await fetch("/api/agendamentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cliente_nome: novoNome,
+          cliente_telefone: novoTelefone,
+          servico,
+          horario_inicio: `${dataAlvoManual}T${novoHorario}:00`,
+          origem: "MANUAL",
+          status: statusFinal,
+          forma_pagamento: novoTipoFluxo === "CONCLUIDO" ? novoFormaPagamento : "PIX",
+          valor_sinal: valorSinalManual,
+          observacoes: observacoesFinal || undefined,
+        }),
+      });
+    } catch (e) {
+      console.warn("Erro ao sincronizar agendamento com API:", e);
+    }
+
+    if (novoAgCriado) {
+      setTodosAgendamentos((prev) => {
+        const existe = prev.some((a) => a.id === novoAgCriado!.id);
+        return existe ? prev : [novoAgCriado!, ...prev];
+      });
+    }
 
     if (novoTipoFluxo === "CONCLUIDO") {
       toastSuccess(
@@ -402,6 +437,7 @@ export default function AgendaPage() {
       toastSuccess("Agendamento Criado!", `${novoNome} agendado para às ${novoHorario} na fila da agenda.`);
     }
 
+    const tipoFluxoUsado = novoTipoFluxo;
     setNovoNome("");
     setNovoTelefone("");
     setNovoFormaPagamento("PIX");
@@ -411,11 +447,10 @@ export default function AgendaPage() {
     setNovoTipoFluxo("AGENDAR");
     setModalNovoAgendamentoAberto(false);
 
-    if (novoTipoFluxo === "AGENDAR") {
-      setDataFiltro(dataAlvoManual);
+    setDataFiltro(dataAlvoManual);
+    if (tipoFluxoUsado === "AGENDAR") {
       setAbaAtiva("AGUARDANDO_SINAL");
     } else {
-      setDataFiltro(dataAlvoManual);
       setAbaAtiva("CONCLUIDOS");
     }
     carregarDados(true);

@@ -71,10 +71,12 @@ CREATE TABLE IF NOT EXISTS agendamentos (
     horario_inicio TIMESTAMP WITH TIME ZONE NOT NULL,
     horario_fim TIMESTAMP WITH TIME ZONE NOT NULL,
     duracao_minutos INT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'CONFIRMADO' CHECK (status IN ('CONFIRMADO', 'CONCLUIDO', 'CANCELADO', 'FALTOU')),
+    status TEXT NOT NULL DEFAULT 'AGUARDANDO_SINAL' CHECK (status IN ('AGUARDANDO_SINAL', 'CONFIRMADO', 'CONCLUIDO', 'CANCELADO', 'FALTOU')),
     origem TEXT NOT NULL DEFAULT 'WEB' CHECK (origem IN ('WEB', 'WHATSAPP', 'MANUAL')),
     forma_pagamento TEXT CHECK (forma_pagamento IN ('PIX', 'DINHEIRO', 'CARTAO')),
     valor_cobrado DECIMAL(10,2) NOT NULL,
+    valor_sinal DECIMAL(10,2),
+    tempo_expiracao_sinal TIMESTAMP WITH TIME ZONE,
     observacoes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );

@@ -17,7 +17,14 @@ export async function GET(req: Request) {
       const { data, error } = await query;
       if (!error && data) {
         if (data.length > 0 || dataFiltro) {
-          return NextResponse.json(data);
+          const mapeados = data.map((ag: Record<string, unknown>) => {
+            const obs = typeof ag.observacoes === "string" ? ag.observacoes : "";
+            if (ag.status === "CONFIRMADO" && obs.includes("[AGUARDANDO_SINAL]")) {
+              return { ...ag, status: "AGUARDANDO_SINAL" };
+            }
+            return ag;
+          });
+          return NextResponse.json(mapeados);
         }
       }
     }
@@ -90,17 +97,60 @@ export async function POST(req: Request) {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from("clientes").upsert({
-          id: clienteId,
-          nome: cliente_nome,
-          telefone: telLimpo,
-          ultimo_servico_id: servico.id,
-          ultimo_servico_nome: servico.titulo,
-          ultima_visita: horario_inicio,
-          total_visitas: statusInicial === "CONCLUIDO" ? 1 : 0,
-        });
+        await supabase.from("clientes").upsert(
+          {
+            nome: cliente_nome,
+            telefone: telLimpo,
+            ultimo_servico_id: servico.id,
+            ultimo_servico_nome: servico.titulo,
+            ultima_visita: horario_inicio,
+            total_visitas: statusInicial === "CONCLUIDO" ? 1 : 0,
+          },
+          { onConflict: "telefone" }
+        );
 
-        await supabase.from("agendamentos").insert(novo);
+        // Deixar o Postgres gerar o ID uuid automaticamente
+        const payloadSupabase: Record<string, unknown> = {
+          cliente_nome,
+          cliente_telefone: telLimpo,
+          servico_id: servico.id,
+          servico_titulo: servico.titulo,
+          horario_inicio,
+          horario_fim: horarioFim,
+          duracao_minutos: servico.duracao_minutos || 30,
+          status: statusInicial,
+          origem,
+          valor_cobrado: servico.preco,
+          valor_sinal: valorSinal,
+          tempo_expiracao_sinal: statusInicial === "AGUARDANDO_SINAL" ? tempoExpiracao : null,
+          forma_pagamento: forma_pagamento || null,
+          observacoes: observacoes || null,
+        };
+
+        const { error: insErr } = await supabase.from("agendamentos").insert(payloadSupabase);
+        if (insErr) {
+          console.warn("Aviso ao persistir agendamento no Supabase (tentando fallback):", insErr.message);
+          // Fallback para bancos que tenham constraint antiga ou sem colunas novas:
+          const obsFallback =
+            statusInicial === "AGUARDANDO_SINAL"
+              ? `[AGUARDANDO_SINAL] ${observacoes || ""}`.trim()
+              : observacoes || null;
+
+          await supabase.from("agendamentos").insert({
+            cliente_nome,
+            cliente_telefone: telLimpo,
+            servico_id: servico.id,
+            servico_titulo: servico.titulo,
+            horario_inicio,
+            horario_fim: horarioFim,
+            duracao_minutos: servico.duracao_minutos || 30,
+            status: statusInicial === "AGUARDANDO_SINAL" ? "CONFIRMADO" : statusInicial,
+            origem,
+            valor_cobrado: servico.preco,
+            forma_pagamento: forma_pagamento || null,
+            observacoes: obsFallback,
+          });
+        }
       } catch (errDb) {
         console.error("Erro ao persistir no Supabase:", errDb);
       }
