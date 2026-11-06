@@ -45,7 +45,7 @@ export default function WhatsAppPage() {
   // Estados do Simulador de Chat em Tempo Real
   const [mensagens, setMensagens] = useState<ChatMessage[]>([]);
   const [inputMensagem, setInputMensagem] = useState("");
-  const [botStep, setBotStep] = useState<"INICIAL" | "ESCOLHENDO_SERVICO" | "ESCOLHENDO_SLOT" | "DIGITANDO_NOME" | "FINALIZADO">("INICIAL");
+  const [botStep, setBotStep] = useState<"INICIAL" | "ESCOLHENDO_SERVICO" | "ESCOLHENDO_SLOT" | "DIGITANDO_NOME" | "AGUARDANDO_COMPROVANTE" | "FINALIZADO">("INICIAL");
   const [servicoEscolhido, setServicoEscolhido] = useState<Servico | null>(null);
   const [slotsCalculados, setSlotsCalculados] = useState<HorarioSlot[]>([]);
   const [slotEscolhido, setSlotEscolhido] = useState<HorarioSlot | null>(null);
@@ -285,6 +285,13 @@ export default function WhatsAppPage() {
         const nomeCliente = textoUsuario;
         const dataHoraInicio = `${dataAlvo}T${slotEscolhido.hora_inicio}:00`;
 
+        const cfg = await DataStore.getConfig();
+        const exigeSinal = cfg.exigir_sinal ?? true;
+        const valorSinal =
+          cfg.tipo_sinal === "FIXO"
+            ? cfg.sinal_valor_fixo ?? 20
+            : Math.round((servicoEscolhido.preco * (cfg.sinal_porcentagem ?? 30)) / 100);
+
         // Salvar agendamento real no banco!
         await DataStore.createAgendamento({
           cliente_nome: nomeCliente,
@@ -292,17 +299,50 @@ export default function WhatsAppPage() {
           servico: servicoEscolhido,
           horario_inicio: dataHoraInicio,
           origem: "WHATSAPP",
+          status: exigeSinal ? "AGUARDANDO_SINAL" : "CONFIRMADO",
+          valor_sinal: exigeSinal ? valorSinal : undefined,
         });
 
+        if (exigeSinal) {
+          respostaBot =
+            `✨ *PRÉ-RESERVA REALIZADA COM SUCESSO!* ✨\n\n` +
+            `👤 *Cliente:* ${nomeCliente}\n` +
+            `✨ *Procedimento:* ${servicoEscolhido.titulo}\n` +
+            `📅 *Data:* Hoje às *${slotEscolhido.hora_inicio}*\n` +
+            `💵 *Valor Total:* ${formatarMoeda(servicoEscolhido.preco)}\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `🔒 *GARANTIA DO SEU HORÁRIO*\n` +
+            `Para confirmar com exclusividade a sua vaga na agenda e evitar cancelamentos, solicitamos um sinal de:\n\n` +
+            `💰 *Valor do Sinal:* *${formatarMoeda(valorSinal)}*\n` +
+            `_(O restante de ${formatarMoeda(servicoEscolhido.preco - valorSinal)} será pago no dia do atendimento)_\n\n` +
+            `🔑 *CHAVE PIX (Celular):*\n` +
+            `\`${cfg.chave_pix || "82981430673"}\`\n` +
+            `*Titular:* ${cfg.titular_pix || "Luisa Alves dos Santos"}\n\n` +
+            `⏳ *Atenção:* Seu horário fica pré-reservado por *${cfg.tempo_limite_sinal_minutos || 30} minutos*.\n` +
+            `Por favor, envie o comprovante do PIX respondendo a esta mensagem para confirmarmos seu horário! ✨\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+          setBotStep("AGUARDANDO_COMPROVANTE");
+        } else {
+          respostaBot =
+            `🎉 *AGENDAMENTO CONFIRMADO COM SUCESSO!* 🎉\n\n` +
+            `👤 *Cliente:* ${nomeCliente}\n` +
+            `✨ *Procedimento:* ${servicoEscolhido.titulo}\n` +
+            `📅 *Data:* Hoje às *${slotEscolhido.hora_inicio}*\n` +
+            `💵 *Valor:* ${formatarMoeda(servicoEscolhido.preco)}\n` +
+            `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+            `✅ _Já inseri seu horário na agenda da designer! Te mandaremos uma mensagem de lembrete 2h antes._\n\n` +
+            `Aguardamos você! ✨`;
+          setBotStep("FINALIZADO");
+        }
+      }
+
+      // ESTÁGIO 5: RECEBIMENTO DO COMPROVANTE
+      else if (botStep === "AGUARDANDO_COMPROVANTE") {
         respostaBot =
-          `🎉 *AGENDAMENTO CONFIRMADO COM SUCESSO!* 🎉\n\n` +
-          `👤 *Cliente:* ${nomeCliente}\n` +
-          `✨ *Procedimento:* ${servicoEscolhido.titulo}\n` +
-          `📅 *Data:* Hoje às *${slotEscolhido.hora_inicio}*\n` +
-          `💵 *Valor:* ${formatarMoeda(servicoEscolhido.preco)}\n` +
-          `📍 *Local:* Studio Malu Alves Beauty\n\n` +
-          `✅ _Já inseri seu horário na agenda da designer! Te mandaremos uma mensagem de lembrete 2h antes._\n\n` +
-          `Aguardamos você! ✨`;
+          `📸 *Comprovante recebido com sucesso!* ✨\n\n` +
+          `O seu horário hoje às *${slotEscolhido?.hora_inicio || ""}* está garantido e protegido!\n` +
+          `Nossa equipe já está conferindo a transferência e você receberá a confirmação definitiva aqui em instantes.\n\n` +
+          `Muito obrigada pela preferência! 🌸`;
         setBotStep("FINALIZADO");
       }
 

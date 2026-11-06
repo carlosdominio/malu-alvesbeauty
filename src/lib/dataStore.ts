@@ -281,6 +281,8 @@ export const DataStore = {
     horario_inicio: string;
     origem?: "WEB" | "WHATSAPP" | "MANUAL";
     observacoes?: string;
+    status?: StatusAgendamento;
+    valor_sinal?: number;
   }): Promise<Agendamento> {
     const { cliente_nome, cliente_telefone, servico, horario_inicio, origem = "WEB", observacoes } = params;
 
@@ -295,6 +297,24 @@ export const DataStore = {
       horario_inicio
     );
 
+    const config = await this.getConfig();
+    const exigeSinal = config.exigir_sinal ?? true;
+    let valorSinal = params.valor_sinal;
+    if (valorSinal === undefined && exigeSinal) {
+      if (config.tipo_sinal === "FIXO") {
+        valorSinal = config.sinal_valor_fixo ?? 20;
+      } else {
+        const pct = config.sinal_porcentagem ?? 30;
+        valorSinal = Math.round((servico.preco * pct) / 100);
+      }
+    }
+
+    const statusFinal: StatusAgendamento =
+      params.status || (exigeSinal ? "AGUARDANDO_SINAL" : "CONFIRMADO");
+
+    const tempoMinutos = config.tempo_limite_sinal_minutos || 30;
+    const tempoExpiracao = new Date(Date.now() + tempoMinutos * 60 * 1000).toISOString();
+
     const novoAgendamento: Agendamento = {
       id: `ag-${Date.now()}`,
       cliente_id: cliente.id,
@@ -305,9 +325,11 @@ export const DataStore = {
       horario_inicio,
       horario_fim: horarioFim,
       duracao_minutos: servico.duracao_minutos,
-      status: "CONFIRMADO",
+      status: statusFinal,
       origem,
       valor_cobrado: servico.preco,
+      valor_sinal: valorSinal,
+      tempo_expiracao_sinal: statusFinal === "AGUARDANDO_SINAL" ? tempoExpiracao : undefined,
       observacoes,
       created_at: new Date().toISOString(),
     };

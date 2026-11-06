@@ -11,6 +11,9 @@ import {
   User,
   Flame,
   ChevronLeft,
+  Copy,
+  Check,
+  QrCode,
 } from "lucide-react";
 import { Agendamento, BarbeariaConfig, Cliente, ExpedienteDia, HorarioSlot, Servico } from "@/types";
 import { DataStore } from "@/lib/dataStore";
@@ -42,6 +45,14 @@ export default function AgendarPage() {
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [loading, setLoading] = useState(false);
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState<Agendamento | null>(null);
+  const [copiadoPix, setCopiadoPix] = useState(false);
+
+  const copiarChavePix = (chave: string) => {
+    if (!chave) return;
+    navigator.clipboard.writeText(chave);
+    setCopiadoPix(true);
+    setTimeout(() => setCopiadoPix(false), 2500);
+  };
 
   // Relógio em tempo real
   const [agora, setAgora] = useState<Date>(new Date());
@@ -390,83 +401,223 @@ export default function AgendarPage() {
 
       <main className="max-w-md mx-auto px-4 pt-6">
         {/* ========================================================================= */}
-        {/* TELA DE SUCESSO (PASSO 3) */}
+        {/* TELA DE SUCESSO OU AGUARDANDO SINAL (PASSO 3) */}
         {/* ========================================================================= */}
         {passo === 3 && agendamentoConfirmado && (
           <div className="animate-in fade-in zoom-in-95 duration-300">
-            <div className="rounded-3xl bg-zinc-900 border border-emerald-500/30 p-6 text-center shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl" />
+            {agendamentoConfirmado.status === "AGUARDANDO_SINAL" ? (
+              /* CARD DE PRÉ-RESERVA COM SINAL PIX */
+              <div className="rounded-3xl bg-zinc-900 border border-amber-500/40 p-6 text-center shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl" />
 
-              <div className="w-16 h-16 bg-emerald-500/20 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto text-emerald-400 mb-4 shadow-lg shadow-emerald-500/10">
-                <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
-              </div>
-
-              <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                Agendamento Confirmado!
-              </span>
-
-              <h2 className="text-2xl font-black text-white mt-3">
-                Tudo Pronto, {agendamentoConfirmado.cliente_nome.split(" ")[0]}!
-              </h2>
-
-              <p className="text-xs text-zinc-400 mt-1">
-                Seu horário já está reservado com exclusividade na agenda.
-              </p>
-
-              {/* Card Resumo do Agendamento */}
-              <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 mt-5 text-left space-y-3">
-                <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800">
-                  <span className="text-xs text-zinc-400">Serviço:</span>
-                  <span className="text-sm font-bold text-amber-400">
-                    {agendamentoConfirmado.servico_titulo}
-                  </span>
+                <div className="w-16 h-16 bg-amber-500/20 border border-amber-500/40 rounded-full flex items-center justify-center mx-auto text-amber-400 mb-4 shadow-lg shadow-amber-500/15 animate-pulse">
+                  <Clock className="w-9 h-9 stroke-[2.5]" />
                 </div>
 
-                <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800">
-                  <span className="text-xs text-zinc-400">Data e Horário:</span>
-                  <span className="text-sm font-bold text-zinc-200 flex items-center gap-1.5">
-                    <CalendarIcon className="w-4 h-4 text-amber-400" />
-                    {formatarData(agendamentoConfirmado.horario_inicio)} às{" "}
-                    {agendamentoConfirmado.horario_inicio.split("T")[1].slice(0, 5)}
-                  </span>
+                <span className="text-xs uppercase font-extrabold tracking-widest text-amber-300 bg-amber-500/15 px-3 py-1 rounded-full border border-amber-500/30 inline-flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                  Pré-Reserva Realizada!
+                </span>
+
+                <h2 className="text-2xl font-black text-white mt-3">
+                  Quase Tudo Pronto, {agendamentoConfirmado.cliente_nome.split(" ")[0]}!
+                </h2>
+
+                <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed">
+                  Seu horário está pré-reservado por{" "}
+                  <strong className="text-amber-400 font-bold">
+                    {config?.tempo_limite_sinal_minutos || 30} minutos
+                  </strong>
+                  . Para garantir a vaga com exclusividade, envie o sinal via PIX:
+                </p>
+
+                {/* Card Resumo com Valor do Sinal */}
+                <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 mt-5 text-left space-y-2.5">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                    <span className="text-xs text-zinc-400">Procedimento:</span>
+                    <span className="text-sm font-bold text-zinc-100">
+                      {agendamentoConfirmado.servico_titulo}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                    <span className="text-xs text-zinc-400">Data e Horário:</span>
+                    <span className="text-sm font-bold text-zinc-200 flex items-center gap-1.5">
+                      <CalendarIcon className="w-4 h-4 text-amber-400" />
+                      {formatarData(agendamentoConfirmado.horario_inicio)} às{" "}
+                      {agendamentoConfirmado.horario_inicio.split("T")[1].slice(0, 5)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                    <span className="text-xs text-zinc-400">Valor Total:</span>
+                    <span className="text-xs font-semibold text-zinc-300">
+                      {formatarMoeda(agendamentoConfirmado.valor_cobrado)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div>
+                      <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+                        Sinal de Confirmação ({config?.tipo_sinal === "FIXO" ? "Fixo" : `${config?.sinal_porcentagem || 30}%`}):
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        Restante de {formatarMoeda(agendamentoConfirmado.valor_cobrado - (agendamentoConfirmado.valor_sinal || 0))} pago no dia
+                      </span>
+                    </div>
+                    <span className="text-xl font-black text-amber-400">
+                      {formatarMoeda(agendamentoConfirmado.valor_sinal || 0)}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-400">Valor Estimado:</span>
-                  <span className="text-base font-extrabold text-emerald-400">
-                    {formatarMoeda(agendamentoConfirmado.valor_cobrado)}
-                  </span>
+                {/* Chave PIX e Botão Copiar */}
+                <div className="mt-4 p-4 rounded-2xl bg-gradient-to-b from-zinc-950 to-zinc-900 border border-amber-500/30 text-left space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 flex items-center gap-1">
+                      <QrCode className="w-3.5 h-3.5" />
+                      Chave PIX do Studio
+                    </span>
+                    <span className="text-[10px] text-zinc-400">
+                      Titular: <strong className="text-zinc-200">{config?.titular_pix || "Luisa Alves dos Santos"}</strong>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                    <code className="text-xs font-bold text-amber-300 font-mono truncate select-all">
+                      {config?.chave_pix || "82981430673"}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copiarChavePix(config?.chave_pix || "82981430673")}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0",
+                        copiadoPix
+                          ? "bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20"
+                          : "bg-amber-500 hover:bg-amber-400 text-zinc-950 active:scale-95"
+                      )}
+                    >
+                      {copiadoPix ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copiar PIX</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Botões de Ação */}
+                <div className="mt-5 space-y-2.5">
+                  <a
+                    href={`https://wa.me/${config?.telefone_whatsapp || ""}?text=${encodeURIComponent(
+                      `Olá! Acabei de fazer a pré-reserva para ${agendamentoConfirmado.servico_titulo} no dia ${formatarData(
+                        agendamentoConfirmado.horario_inicio
+                      )} às ${agendamentoConfirmado.horario_inicio.split("T")[1].slice(0, 5)} e acabei de transferir o sinal de ${formatarMoeda(
+                        agendamentoConfirmado.valor_sinal || 0
+                      )}. Segue meu comprovante:`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 text-sm transition-all"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>Enviar Comprovante pelo WhatsApp</span>
+                  </a>
+
+                  <Button
+                    variant="secondary"
+                    className="w-full text-xs font-semibold text-zinc-300"
+                    onClick={() => {
+                      setPasso(1);
+                      setAgendamentoConfirmado(null);
+                    }}
+                  >
+                    Fazer Outro Agendamento
+                  </Button>
                 </div>
               </div>
+            ) : (
+              /* CARD DE CONFIRMAÇÃO DIRETA (QUANDO NÃO EXIGE SINAL) */
+              <div className="rounded-3xl bg-zinc-900 border border-emerald-500/30 p-6 text-center shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl" />
 
-              {/* Botões de Ação */}
-              <div className="mt-6 space-y-2.5">
-                <a
-                  href={`https://wa.me/${config?.telefone_whatsapp || ""}?text=${encodeURIComponent(
-                    `Olá! Acabei de agendar meu horário para ${agendamentoConfirmado.servico_titulo} no dia ${formatarData(
-                      agendamentoConfirmado.horario_inicio
-                    )} às ${agendamentoConfirmado.horario_inicio.split("T")[1].slice(0, 5)}.`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 text-sm transition-all"
-                >
-                  <Phone className="w-4 h-4" />
-                  <span>Enviar no WhatsApp do Studio</span>
-                </a>
+                <div className="w-16 h-16 bg-emerald-500/20 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto text-emerald-400 mb-4 shadow-lg shadow-emerald-500/10">
+                  <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
+                </div>
 
-                <Button
-                  variant="secondary"
-                  className="w-full text-xs font-semibold text-zinc-300"
-                  onClick={() => {
-                    setPasso(1);
-                    setAgendamentoConfirmado(null);
-                  }}
-                >
-                  Fazer Outro Agendamento
-                </Button>
+                <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                  Agendamento Confirmado!
+                </span>
+
+                <h2 className="text-2xl font-black text-white mt-3">
+                  Tudo Pronto, {agendamentoConfirmado.cliente_nome.split(" ")[0]}!
+                </h2>
+
+                <p className="text-xs text-zinc-400 mt-1">
+                  Seu horário já está reservado com exclusividade na agenda.
+                </p>
+
+                {/* Card Resumo do Agendamento */}
+                <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 mt-5 text-left space-y-3">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800">
+                    <span className="text-xs text-zinc-400">Serviço:</span>
+                    <span className="text-sm font-bold text-amber-400">
+                      {agendamentoConfirmado.servico_titulo}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800">
+                    <span className="text-xs text-zinc-400">Data e Horário:</span>
+                    <span className="text-sm font-bold text-zinc-200 flex items-center gap-1.5">
+                      <CalendarIcon className="w-4 h-4 text-amber-400" />
+                      {formatarData(agendamentoConfirmado.horario_inicio)} às{" "}
+                      {agendamentoConfirmado.horario_inicio.split("T")[1].slice(0, 5)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-400">Valor Estimado:</span>
+                    <span className="text-base font-extrabold text-emerald-400">
+                      {formatarMoeda(agendamentoConfirmado.valor_cobrado)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Botões de Ação */}
+                <div className="mt-6 space-y-2.5">
+                  <a
+                    href={`https://wa.me/${config?.telefone_whatsapp || ""}?text=${encodeURIComponent(
+                      `Olá! Acabei de agendar meu horário para ${agendamentoConfirmado.servico_titulo} no dia ${formatarData(
+                        agendamentoConfirmado.horario_inicio
+                      )} às ${agendamentoConfirmado.horario_inicio.split("T")[1].slice(0, 5)}.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 text-sm transition-all"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>Enviar no WhatsApp do Studio</span>
+                  </a>
+
+                  <Button
+                    variant="secondary"
+                    className="w-full text-xs font-semibold text-zinc-300"
+                    onClick={() => {
+                      setPasso(1);
+                      setAgendamentoConfirmado(null);
+                    }}
+                  >
+                    Fazer Outro Agendamento
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -695,15 +846,36 @@ export default function AgendarPage() {
                   </p>
                 </div>
 
-                <Button
-                  type="submit"
-                  variant="gold"
-                  size="lg"
-                  loading={loading}
-                  className="w-full font-black text-sm shadow-xl shadow-amber-500/20 mt-2"
-                >
-                  Confirmar Agendamento • {formatarMoeda(servicoSelecionado.preco)}
-                </Button>
+                {(() => {
+                  const exigeSinal = config?.exigir_sinal ?? true;
+                  const valorSinal =
+                    config?.tipo_sinal === "FIXO"
+                      ? config?.sinal_valor_fixo ?? 20
+                      : Math.round(
+                          (servicoSelecionado.preco * (config?.sinal_porcentagem ?? 30)) / 100
+                        );
+
+                  return (
+                    <div className="space-y-1.5 pt-1">
+                      <Button
+                        type="submit"
+                        variant="gold"
+                        size="lg"
+                        loading={loading}
+                        className="w-full font-black text-sm shadow-xl shadow-amber-500/20"
+                      >
+                        {exigeSinal
+                          ? `Pré-Reservar Horário • Sinal de ${formatarMoeda(valorSinal)}`
+                          : `Confirmar Agendamento • ${formatarMoeda(servicoSelecionado.preco)}`}
+                      </Button>
+                      {exigeSinal && (
+                        <p className="text-[11px] text-center text-amber-400/90 font-medium leading-tight">
+                          🔒 Necessário sinal de {formatarMoeda(valorSinal)} via PIX para garantir a exclusividade da vaga.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </form>
             )}
           </div>

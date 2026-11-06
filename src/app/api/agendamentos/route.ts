@@ -48,6 +48,22 @@ export async function POST(req: Request) {
       horarioFim = `${dataPart}T${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}:00`;
     }
 
+    const config = ServerStore.getConfig();
+    const exigeSinal = config.exigir_sinal ?? true;
+    let valorSinal = body.valor_sinal;
+    if (valorSinal === undefined && exigeSinal) {
+      if (config.tipo_sinal === "FIXO") {
+        valorSinal = config.sinal_valor_fixo ?? 20;
+      } else {
+        const pct = config.sinal_porcentagem ?? 30;
+        valorSinal = Math.round((servico.preco * pct) / 100);
+      }
+    }
+
+    const statusInicial = body.status || (exigeSinal ? "AGUARDANDO_SINAL" : "CONFIRMADO");
+    const tempoMinutos = config.tempo_limite_sinal_minutos || 30;
+    const tempoExpiracao = new Date(Date.now() + tempoMinutos * 60 * 1000).toISOString();
+
     const telLimpo = cliente_telefone.replace(/\D/g, "");
     const agendamentoId = `ag-${Date.now()}`;
     const clienteId = `cli-${Date.now()}`;
@@ -62,9 +78,11 @@ export async function POST(req: Request) {
       horario_inicio,
       horario_fim: horarioFim,
       duracao_minutos: servico.duracao_minutos || 30,
-      status: "CONFIRMADO",
+      status: statusInicial,
       origem,
       valor_cobrado: servico.preco,
+      valor_sinal: valorSinal,
+      tempo_expiracao_sinal: statusInicial === "AGUARDANDO_SINAL" ? tempoExpiracao : null,
       observacoes: observacoes || null,
       created_at: new Date().toISOString(),
     };
@@ -94,6 +112,8 @@ export async function POST(req: Request) {
       horario_inicio,
       origem,
       observacoes,
+      status: statusInicial,
+      valor_sinal: valorSinal,
     });
 
     // Se o agendamento veio do App/PWA ou Manual, dispara confirmação instantânea no WhatsApp!
@@ -106,12 +126,16 @@ export async function POST(req: Request) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tipo: "CONFIRMACAO_WEB",
+          tipo: statusInicial === "AGUARDANDO_SINAL" ? "SOLICITAR_SINAL_WEB" : "CONFIRMACAO_WEB",
           telefone: cliente_telefone,
           nome: cliente_nome,
           servicoTitulo: servico.titulo,
           dataHora: horario_inicio,
           valor: servico.preco,
+          valorSinal,
+          chavePix: config.chave_pix || "82981430673",
+          titularPix: config.titular_pix || "Luisa Alves dos Santos",
+          tempoLimiteMinutos: tempoMinutos,
         }),
       }).catch((e) => console.error("Erro ao disparar WhatsApp pós-agendamento PWA:", e));
     }
@@ -126,22 +150,34 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const body = await req.json();
-    const { id, status, forma_pagamento } = body;
+    const { id, status, forma_pagamento, comprovante_recebido } = body;
 
-    if (!id || !status) {
-      return NextResponse.json({ error: "ID e status são obrigatórios" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (status) updateData.status = status;
+    if (forma_pagamento) updateData.forma_pagamento = forma_pagamento;
+    if (comprovante_recebido !== undefined) {
+      updateData.comprovante_recebido = comprovante_recebido;
+      if (comprovante_recebido) {
+        updateData.comprovante_enviado_em = new Date().toISOString();
+      }
     }
 
     if (isSupabaseConfigured && supabase) {
-      const updateData: Record<string, unknown> = { status };
-      if (forma_pagamento) updateData.forma_pagamento = forma_pagamento;
       const { error } = await supabase.from("agendamentos").update(updateData).eq("id", id);
       if (error) {
         console.error("Erro ao atualizar agendamento no Supabase:", error);
       }
     }
 
-    ServerStore.updateStatusAgendamento(id, status, forma_pagamento);
+    ServerStore.updateAgendamento(id, updateData);
+    if (status) {
+      ServerStore.updateStatusAgendamento(id, status, forma_pagamento);
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Erro ao atualizar status:", error);

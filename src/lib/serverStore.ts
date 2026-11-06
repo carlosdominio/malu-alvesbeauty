@@ -158,6 +158,8 @@ export const ServerStore = {
     horario_inicio: string;
     origem?: "WEB" | "WHATSAPP" | "MANUAL";
     observacoes?: string;
+    status?: StatusAgendamento;
+    valor_sinal?: number;
   }): Agendamento {
     const db = readDB();
     const { cliente_nome, cliente_telefone, servico, horario_inicio, origem = "WHATSAPP", observacoes } = params;
@@ -190,6 +192,23 @@ export const ServerStore = {
       });
     }
 
+    const exigeSinal = db.config.exigir_sinal ?? true;
+    let valorSinalCalculado = params.valor_sinal;
+    if (valorSinalCalculado === undefined && exigeSinal) {
+      if (db.config.tipo_sinal === "FIXO") {
+        valorSinalCalculado = db.config.sinal_valor_fixo ?? 20;
+      } else {
+        const pct = db.config.sinal_porcentagem ?? 30;
+        valorSinalCalculado = Math.round((servico.preco * pct) / 100);
+      }
+    }
+
+    const statusInicial: StatusAgendamento =
+      params.status || (exigeSinal ? "AGUARDANDO_SINAL" : "CONFIRMADO");
+
+    const tempoMinutos = db.config.tempo_limite_sinal_minutos || 30;
+    const tempoExpiracao = new Date(Date.now() + tempoMinutos * 60 * 1000).toISOString();
+
     const novoAgendamento: Agendamento = {
       id: `ag-${Date.now()}`,
       cliente_id: clienteId,
@@ -200,16 +219,18 @@ export const ServerStore = {
       horario_inicio,
       horario_fim: horarioFim,
       duracao_minutos: servico.duracao_minutos,
-      status: "CONFIRMADO",
+      status: statusInicial,
       origem,
       valor_cobrado: servico.preco,
+      valor_sinal: valorSinalCalculado,
+      tempo_expiracao_sinal: statusInicial === "AGUARDANDO_SINAL" ? tempoExpiracao : undefined,
       observacoes,
       created_at: new Date().toISOString(),
     };
 
     db.agendamentos.push(novoAgendamento);
     writeDB(db);
-    console.log(">>> [ServerStore] Agendamento salvo:", novoAgendamento.cliente_nome, novoAgendamento.horario_inicio);
+    console.log(">>> [ServerStore] Agendamento salvo:", novoAgendamento.cliente_nome, novoAgendamento.horario_inicio, novoAgendamento.status);
 
     return novoAgendamento;
   },
@@ -250,6 +271,17 @@ export const ServerStore = {
 
       writeDB(db);
     }
+  },
+
+  updateAgendamento(id: string, updates: Partial<Agendamento>): Agendamento | null {
+    const db = readDB();
+    const idx = db.agendamentos.findIndex((a) => a.id === id);
+    if (idx >= 0) {
+      db.agendamentos[idx] = { ...db.agendamentos[idx], ...updates };
+      writeDB(db);
+      return db.agendamentos[idx];
+    }
+    return null;
   },
 
   limparAgendamentos(modo: "TODOS" | "CANCELADOS" | "TESTES" = "TODOS"): number {

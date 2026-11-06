@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 
-type FiltroAba = "PENDENTES" | "CONCLUIDOS" | "TODOS" | "CANCELADOS";
+type FiltroAba = "AGUARDANDO_SINAL" | "PENDENTES" | "CONCLUIDOS" | "TODOS" | "CANCELADOS";
 
 export default function AgendaPage() {
   const [dataFiltro, setDataFiltro] = useState<string>("");
@@ -267,6 +267,7 @@ export default function AgendaPage() {
 
   // Métricas de contagem por status
   const limiteMaximo = config?.limite_maximo_agendamentos_dia || 15;
+  const agendamentosAguardandoSinal = agendamentos.filter((a) => a.status === "AGUARDANDO_SINAL");
   const agendamentosPendentes = agendamentos.filter((a) => a.status === "CONFIRMADO");
   const agendamentosConcluidos = agendamentos.filter((a) => a.status === "CONCLUIDO");
   const agendamentosCancelados = agendamentos.filter((a) => a.status === "CANCELADO" || a.status === "FALTOU");
@@ -277,6 +278,7 @@ export default function AgendaPage() {
 
   // Filtragem dos agendamentos a serem exibidos de acordo com a aba selecionada
   const agendamentosFiltrados = agendamentos.filter((ag) => {
+    if (abaAtiva === "AGUARDANDO_SINAL") return ag.status === "AGUARDANDO_SINAL";
     if (abaAtiva === "PENDENTES") return ag.status === "CONFIRMADO";
     if (abaAtiva === "CONCLUIDOS") return ag.status === "CONCLUIDO";
     if (abaAtiva === "CANCELADOS") return ag.status === "CANCELADO" || ag.status === "FALTOU";
@@ -414,8 +416,63 @@ export default function AgendaPage() {
         )}
       </div>
 
+      {/* Banner de Aviso de Comprovantes / Sinais Pendentes */}
+      {agendamentosAguardandoSinal.length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">💰</span>
+            <div>
+              <p className="text-xs font-extrabold text-amber-300">
+                {agendamentosAguardandoSinal.length === 1
+                  ? "1 agendamento aguardando confirmação do sinal PIX"
+                  : `${agendamentosAguardandoSinal.length} agendamentos aguardando confirmação do sinal PIX`}
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                Confira o comprovante no WhatsApp e aprove com 1 clique para confirmar a vaga na agenda.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="gold"
+            onClick={() => setAbaAtiva("AGUARDANDO_SINAL")}
+            className="text-xs font-bold shrink-0"
+          >
+            Ver Pendentes
+          </Button>
+        </div>
+      )}
+
       {/* ABAS DE FILTRAGEM INTELIGENTE (Fila Limpa de Atendimento) */}
       <div className="flex items-center gap-1.5 p-1 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-x-auto">
+        {/* Aba Aguardando Sinal */}
+        <button
+          onClick={() => setAbaAtiva("AGUARDANDO_SINAL")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
+            abaAtiva === "AGUARDANDO_SINAL"
+              ? "bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/25"
+              : agendamentosAguardandoSinal.length > 0
+              ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+          )}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>Aguardando Sinal</span>
+          <span
+            className={cn(
+              "px-1.5 py-0.5 rounded-md text-[10px] font-black",
+              abaAtiva === "AGUARDANDO_SINAL"
+                ? "bg-zinc-950 text-amber-400"
+                : agendamentosAguardandoSinal.length > 0
+                ? "bg-amber-500 text-zinc-950 animate-pulse"
+                : "bg-zinc-800 text-zinc-300"
+            )}
+          >
+            {agendamentosAguardandoSinal.length}
+          </span>
+        </button>
+
         <button
           onClick={() => setAbaAtiva("PENDENTES")}
           className={cn(
@@ -426,7 +483,7 @@ export default function AgendaPage() {
           )}
         >
           <Clock className="w-3.5 h-3.5" />
-          <span>Fila / Pendentes</span>
+          <span>Fila / Confirmados</span>
           <span
             className={cn(
               "px-1.5 py-0.5 rounded-md text-[10px] font-black",
@@ -509,7 +566,9 @@ export default function AgendaPage() {
           <div className="p-12 rounded-3xl bg-zinc-900/60 border border-zinc-800/80 text-center space-y-2">
             <CalendarIcon className="w-10 h-10 text-zinc-600 mx-auto stroke-1" />
             <h4 className="text-base font-bold text-zinc-300">
-              {abaAtiva === "PENDENTES"
+              {abaAtiva === "AGUARDANDO_SINAL"
+                ? "Nenhum agendamento aguardando sinal no momento"
+                : abaAtiva === "PENDENTES"
                 ? "Nenhum cliente aguardando na fila"
                 : abaAtiva === "CONCLUIDOS"
                 ? "Nenhum atendimento concluído ainda hoje"
@@ -518,7 +577,9 @@ export default function AgendaPage() {
                 : "Nenhum agendamento para este dia"}
             </h4>
             <p className="text-xs text-zinc-500">
-              {abaAtiva === "PENDENTES"
+              {abaAtiva === "AGUARDANDO_SINAL"
+                ? "Todos os sinais foram aprovados e não há pagamentos pendentes."
+                : abaAtiva === "PENDENTES"
                 ? "Sua fila de espera está livre. Novos agendamentos no Zap aparecerão aqui em tempo real."
                 : "Selecione outra aba para visualizar."}
             </p>
@@ -581,6 +642,20 @@ export default function AgendaPage() {
                           Via WhatsApp
                         </Badge>
                       )}
+                      {ag.status === "AGUARDANDO_SINAL" &&
+                        (ag.comprovante_recebido ? (
+                          <Badge
+                            variant="success"
+                            className="text-[10px] flex items-center gap-1 font-bold animate-pulse bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                          >
+                            📸 Comprovante Enviado
+                          </Badge>
+                        ) : (
+                          <Badge variant="warning" className="text-[10px] flex items-center gap-1 font-bold">
+                            <Clock className="w-2.5 h-2.5" />
+                            Aguardando Sinal ({formatarMoeda(ag.valor_sinal || 0)})
+                          </Badge>
+                        ))}
                       {ag.status === "CONFIRMADO" && <Badge variant="warning">Aguardando Atendimento</Badge>}
                       {ag.status === "CONCLUIDO" && (
                         <Badge variant="success">
@@ -594,6 +669,13 @@ export default function AgendaPage() {
                     <p className="text-xs text-amber-400 font-semibold mt-0.5">
                       {ag.servico_titulo} • {formatarMoeda(ag.valor_cobrado)}
                     </p>
+
+                    {ag.status === "AGUARDANDO_SINAL" && ag.valor_sinal && (
+                      <p className="text-[11px] text-amber-300 font-semibold mt-0.5">
+                        💰 Sinal: <strong>{formatarMoeda(ag.valor_sinal)}</strong> • Restante no studio:{" "}
+                        {formatarMoeda(ag.valor_cobrado - ag.valor_sinal)}
+                      </p>
+                    )}
 
                     <div className="flex items-center gap-3 mt-1 text-[11px] text-zinc-400">
                       <span>{formatarTelefone(ag.cliente_telefone)}</span>
@@ -613,6 +695,41 @@ export default function AgendaPage() {
                   >
                     <MessageCircle className="w-4 h-4" />
                   </a>
+
+                  {ag.status === "AGUARDANDO_SINAL" && (
+                    <>
+                      <Button
+                        variant="gold"
+                        size="sm"
+                        onClick={async () => {
+                          await handleStatusChange(ag.id, "CONFIRMADO");
+                          toastSuccess(
+                            "Sinal Confirmado!",
+                            `O agendamento de ${ag.cliente_nome} foi confirmado com sucesso na agenda.`
+                          );
+                        }}
+                        className="text-xs font-black shadow-md shadow-amber-500/20"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5 mr-1" />
+                        Aprovar Sinal
+                      </Button>
+
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() =>
+                          setConfirmarStatusModal({
+                            aberto: true,
+                            agendamento: ag,
+                            novoStatus: "CANCELADO",
+                          })
+                        }
+                        className="text-xs font-bold"
+                      >
+                        Liberar Vaga
+                      </Button>
+                    </>
+                  )}
 
                   {ag.status === "CONFIRMADO" && (
                     <>

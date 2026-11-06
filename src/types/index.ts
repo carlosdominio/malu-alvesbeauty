@@ -9,6 +9,12 @@ export interface BarbeariaConfig {
   limite_maximo_agendamentos_dia: number;
   mensagem_boas_vindas?: string;
   chave_pix?: string;
+  titular_pix?: string;
+  exigir_sinal?: boolean;
+  tipo_sinal?: 'PORCENTAGEM' | 'FIXO';
+  sinal_porcentagem?: number;
+  sinal_valor_fixo?: number;
+  tempo_limite_sinal_minutos?: number;
   regra_fidelidade_cortes?: number; // Ex: A cada 5 atendimentos ganha desconto
   porcentagem_desconto_fidelidade?: number; // Ex: 20%
   auto_limpeza_cancelados_dias?: number; // 0 = Desativado, 7, 15, 30, 60 dias
@@ -64,7 +70,7 @@ export interface Cliente {
   created_at: string;
 }
 
-export type StatusAgendamento = 'CONFIRMADO' | 'CONCLUIDO' | 'CANCELADO' | 'FALTOU';
+export type StatusAgendamento = 'AGUARDANDO_SINAL' | 'CONFIRMADO' | 'CONCLUIDO' | 'CANCELADO' | 'FALTOU';
 export type OrigemAgendamento = 'WEB' | 'WHATSAPP' | 'MANUAL';
 export type FormaPagamento = 'PIX' | 'DINHEIRO' | 'CARTAO';
 
@@ -81,6 +87,10 @@ export interface Agendamento {
   status: StatusAgendamento;
   origem: OrigemAgendamento;
   valor_cobrado: number;
+  valor_sinal?: number;
+  comprovante_recebido?: boolean;
+  comprovante_enviado_em?: string;
+  tempo_expiracao_sinal?: string;
   forma_pagamento?: FormaPagamento;
   observacoes?: string;
   created_at: string;

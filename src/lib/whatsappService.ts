@@ -15,7 +15,7 @@ import { formatarMoeda } from "./utils";
 import { Servico, HorarioSlot } from "@/types";
 
 interface SessionState {
-  step: "INICIAL" | "ESCOLHENDO_SERVICO" | "ESCOLHENDO_SLOT" | "DIGITANDO_NOME";
+  step: "INICIAL" | "ESCOLHENDO_SERVICO" | "ESCOLHENDO_SLOT" | "DIGITANDO_NOME" | "AGUARDANDO_COMPROVANTE";
   servicoEscolhido?: Servico;
   slotsDisponiveis?: HorarioSlot[];
   slotEscolhido?: HorarioSlot;
@@ -144,13 +144,18 @@ class WhatsAppBotService {
     const remoteJid = msg.key?.remoteJid;
     if (!remoteJid || !this.sock) return;
 
+    const temImagem = !!msg.message?.imageMessage;
+    const temDocumento = !!msg.message?.documentMessage;
+
     const textoUsuario = (
       msg.message?.conversation ||
       msg.message?.extendedTextMessage?.text ||
+      msg.message?.imageMessage?.caption ||
+      msg.message?.documentMessage?.caption ||
       ""
     ).trim();
 
-    if (!textoUsuario) return;
+    if (!textoUsuario && !temImagem && !temDocumento) return;
 
     const pushName = msg.pushName || "Cliente";
     const telefoneLimpo = remoteJid.replace("@s.whatsapp.net", "").replace(/\D/g, "");
@@ -158,12 +163,66 @@ class WhatsAppBotService {
     let session = this.userSessions.get(remoteJid) || { step: "INICIAL" };
     const lower = textoUsuario.toLowerCase();
 
+    // =========================================================================
+    // VERIFICAÇÃO INTELIGENTE DE COMPROVANTE DE SINAL VIA PIX
+    // =========================================================================
+    const agendamentosHoje = await DataStore.getAgendamentos();
+    const agendamentoPendente = agendamentosHoje.find(
+      (a) =>
+        a.cliente_telefone.replace(/\D/g, "") === telefoneLimpo &&
+        a.status === "AGUARDANDO_SINAL"
+    );
+
+    const ehPalavraChaveComprovante =
+      lower.includes("comprovante") ||
+      lower.includes("pago") ||
+      lower.includes("pix") ||
+      lower.includes("transferi") ||
+      lower.includes("enviei") ||
+      lower.includes("mandei") ||
+      lower.includes("segue");
+
+    if (agendamentoPendente && (temImagem || temDocumento || ehPalavraChaveComprovante || session.step === "AGUARDANDO_COMPROVANTE")) {
+      // Atualizar agendamento informando que o comprovante foi enviado pelo cliente
+      try {
+        await DataStore.updateStatusAgendamento(agendamentoPendente.id, "AGUARDANDO_SINAL");
+        // Registrar flag comprovante_recebido
+        await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/agendamentos`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: agendamentoPendente.id,
+            comprovante_recebido: true,
+          }),
+        }).catch(() => null);
+      } catch (err) {
+        console.error("Erro ao registrar comprovante:", err);
+      }
+
+      const respostaComprovante =
+        `📸 *Comprovante recebido com sucesso, ${agendamentoPendente.cliente_nome.split(" ")[0]}!* ✨\n\n` +
+        `O seu horário hoje às *${agendamentoPendente.horario_inicio.split("T")[1]?.slice(0, 5)}* está garantido e protegido!\n` +
+        `Nossa equipe já está conferindo a transferência e você receberá a confirmação definitiva aqui em instantes.\n\n` +
+        `Muito obrigada pela preferência! 🌸`;
+
+      session = { step: "INICIAL" };
+      this.userSessions.set(remoteJid, session);
+
+      try {
+        await this.sock.sendMessage(remoteJid, { text: respostaComprovante });
+      } catch (err) {
+        console.error("Erro ao enviar confirmação de comprovante:", err);
+      }
+      return;
+    }
+
     const hoje = new Date();
     const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
 
-    const [servicos, expedientes] = await Promise.all([
+    const [servicos, expedientes, config] = await Promise.all([
       DataStore.getServicos(),
       DataStore.getExpediente(),
+      DataStore.getConfig(),
     ]);
 
     const servicosAtivos = servicos.filter((s) => s.ativo);
@@ -295,6 +354,14 @@ class WhatsAppBotService {
       const nomeCliente = textoUsuario;
       const dataHoraInicio = `${session.dataAlvo || hojeStr}T${session.slotEscolhido.hora_inicio}:00`;
 
+      const exigeSinal = config.exigir_sinal ?? true;
+      const valorSinal =
+        config.tipo_sinal === "FIXO"
+          ? config.sinal_valor_fixo ?? 20
+          : Math.round(
+              (session.servicoEscolhido.preco * (config.sinal_porcentagem ?? 30)) / 100
+            );
+
       // Criar agendamento no sistema
       await DataStore.createAgendamento({
         cliente_nome: nomeCliente,
@@ -302,20 +369,43 @@ class WhatsAppBotService {
         servico: session.servicoEscolhido,
         horario_inicio: dataHoraInicio,
         origem: "WHATSAPP",
+        status: exigeSinal ? "AGUARDANDO_SINAL" : "CONFIRMADO",
+        valor_sinal: exigeSinal ? valorSinal : undefined,
       });
 
-      respostaTexto =
-        `🎉 *AGENDAMENTO CONFIRMADO!* 🎉\n\n` +
-        `👤 *Cliente:* ${nomeCliente}\n` +
-        `✨ *Procedimento:* ${session.servicoEscolhido.titulo}\n` +
-        `📅 *Data:* Hoje às *${session.slotEscolhido.hora_inicio}*\n` +
-        `💵 *Valor:* ${formatarMoeda(session.servicoEscolhido.preco)}\n` +
-        `📍 *Local:* Studio Malu Alves Beauty\n\n` +
-        `✅ _Seu horário já foi reservado na agenda da designer! Enviaremos um lembrete 2h antes._\n\n` +
-        `Aguardamos você! ✨`;
+      if (exigeSinal) {
+        respostaTexto =
+          `✨ *PRÉ-RESERVA REALIZADA COM SUCESSO!* ✨\n\n` +
+          `👤 *Cliente:* ${nomeCliente}\n` +
+          `✨ *Procedimento:* ${session.servicoEscolhido.titulo}\n` +
+          `📅 *Data:* Hoje às *${session.slotEscolhido.hora_inicio}*\n` +
+          `💵 *Valor Total:* ${formatarMoeda(session.servicoEscolhido.preco)}\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `🔒 *GARANTIA DO SEU HORÁRIO*\n` +
+          `Para confirmar com exclusividade a sua vaga na agenda e evitar cancelamentos, solicitamos um pequeno sinal de:\n\n` +
+          `💰 *Valor do Sinal:* *${formatarMoeda(valorSinal)}*\n` +
+          `_(O restante de ${formatarMoeda(session.servicoEscolhido.preco - valorSinal)} será pago no studio no dia do atendimento)_\n\n` +
+          `🔑 *CHAVE PIX (Celular):*\n` +
+          `\`${config.chave_pix || "82981430673"}\`\n` +
+          `*Titular:* ${config.titular_pix || "Luisa Alves dos Santos"}\n\n` +
+          `⏳ *Atenção:* Seu horário fica pré-reservado por *${config.tempo_limite_sinal_minutos || 30} minutos*.\n` +
+          `Por favor, envie o comprovante do PIX respondendo a esta mensagem para confirmarmos seu horário! ✨\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-      // Resetar sessão
-      session = { step: "INICIAL" };
+        session = { step: "AGUARDANDO_COMPROVANTE" };
+      } else {
+        respostaTexto =
+          `🎉 *AGENDAMENTO CONFIRMADO!* 🎉\n\n` +
+          `👤 *Cliente:* ${nomeCliente}\n` +
+          `✨ *Procedimento:* ${session.servicoEscolhido.titulo}\n` +
+          `📅 *Data:* Hoje às *${session.slotEscolhido.hora_inicio}*\n` +
+          `💵 *Valor:* ${formatarMoeda(session.servicoEscolhido.preco)}\n` +
+          `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+          `✅ _Seu horário já foi reservado na agenda da designer! Enviaremos um lembrete 2h antes._\n\n` +
+          `Aguardamos você! ✨`;
+
+        session = { step: "INICIAL" };
+      }
     }
 
     this.userSessions.set(remoteJid, session);

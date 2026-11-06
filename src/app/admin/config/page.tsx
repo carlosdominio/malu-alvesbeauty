@@ -1,7 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, Check, Trash2, AlertTriangle, RefreshCw, ShieldCheck, Lock, User, Eye, EyeOff, Sparkles } from "lucide-react";
+import {
+  Save,
+  Check,
+  Trash2,
+  AlertTriangle,
+  RefreshCw,
+  ShieldCheck,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  Sparkles,
+  QrCode,
+  Percent,
+  Coins,
+} from "lucide-react";
 import { BarbeariaConfig } from "@/types";
 import { DataStore } from "@/lib/dataStore";
 import { Button } from "@/components/ui/Button";
@@ -111,19 +126,230 @@ export default function ConfigPage() {
           />
         </div>
 
-        {/* Chave Pix para Recebimento */}
-        <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
-            Chave Pix do Studio
-          </label>
-          <input
-            type="text"
-            required
-            value={config.chave_pix || ""}
-            onChange={(e) => setConfig({ ...config, chave_pix: e.target.value })}
-            placeholder="Ex: CPF, CNPJ, E-mail ou Celular"
-            className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-semibold"
-          />
+        {/* ========================================================================= */}
+        {/* SEÇÃO: GARANTIA DE HORÁRIO & SINAL ANTECIPADO (ANTI-NO-SHOW) */}
+        {/* ========================================================================= */}
+        <div className="p-5 rounded-2xl bg-zinc-950/70 border border-amber-500/30 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <QrCode className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-zinc-100 flex items-center gap-2">
+                  <span>Sinal Antecipado via PIX</span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    Anti-Falta
+                  </span>
+                </h3>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Exija um sinal via PIX para garantir a reserva e evitar horários vazios na agenda.
+                </p>
+              </div>
+            </div>
+
+            {/* Toggle Liga / Desliga */}
+            <button
+              type="button"
+              onClick={() =>
+                setConfig({
+                  ...config,
+                  exigir_sinal: !(config.exigir_sinal ?? true),
+                })
+              }
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                (config.exigir_sinal ?? true) ? "bg-amber-500" : "bg-zinc-800"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-zinc-950 transition-transform ${
+                  (config.exigir_sinal ?? true) ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          {(config.exigir_sinal ?? true) && (
+            <div className="pt-3 border-t border-zinc-800 space-y-4 animate-in fade-in duration-200">
+              {/* Chave PIX e Nome da Titular */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
+                    Chave PIX do Studio (Celular/CPF/Email)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={config.chave_pix || ""}
+                    onChange={(e) => setConfig({ ...config, chave_pix: e.target.value })}
+                    placeholder="Ex: 82981430673"
+                    className="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
+                    Nome da Titular da Conta
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={config.titular_pix || ""}
+                    onChange={(e) => setConfig({ ...config, titular_pix: e.target.value })}
+                    placeholder="Ex: Luisa Alves dos Santos"
+                    className="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-semibold"
+                  />
+                </div>
+              </div>
+
+              {/* Tipo de Cálculo e Valor */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
+                    Modelo de Cobrança do Sinal
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, tipo_sinal: "PORCENTAGEM" })}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                        (config.tipo_sinal ?? "PORCENTAGEM") === "PORCENTAGEM"
+                          ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/20"
+                          : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                      }`}
+                    >
+                      <Percent className="w-3.5 h-3.5" />
+                      Porcentagem (%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, tipo_sinal: "FIXO" })}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                        config.tipo_sinal === "FIXO"
+                          ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/20"
+                          : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                      }`}
+                    >
+                      <Coins className="w-3.5 h-3.5" />
+                      Valor Fixo (R$)
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  {(config.tipo_sinal ?? "PORCENTAGEM") === "PORCENTAGEM" ? (
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-amber-400 block mb-1.5">
+                        Porcentagem do Procedimento
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="10"
+                          max="100"
+                          required
+                          value={config.sinal_porcentagem ?? 30}
+                          onChange={(e) =>
+                            setConfig({
+                              ...config,
+                              sinal_porcentagem: parseInt(e.target.value, 10) || 30,
+                            })
+                          }
+                          className="w-24 px-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-black text-center"
+                        />
+                        <div className="flex items-center gap-1 flex-1">
+                          {[20, 30, 50].map((pct) => (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => setConfig({ ...config, sinal_porcentagem: pct })}
+                              className={`flex-1 py-2 rounded-lg text-xs font-extrabold border transition-all ${
+                                (config.sinal_porcentagem ?? 30) === pct
+                                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                  : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-850"
+                              }`}
+                            >
+                              {pct}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-amber-400 block mb-1.5">
+                        Valor Fixo em Reais (R$)
+                      </label>
+                      <input
+                        type="number"
+                        min="5"
+                        max="500"
+                        required
+                        value={config.sinal_valor_fixo ?? 20}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            sinal_valor_fixo: parseFloat(e.target.value) || 20,
+                          })
+                        }
+                        className="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-bold"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Tolerância de Tempo para Envio do Comprovante */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
+                  Tolerância para Envio do Comprovante (Tempo de Reserva)
+                </label>
+                <select
+                  value={config.tempo_limite_sinal_minutos ?? 30}
+                  onChange={(e) =>
+                    setConfig({
+                      ...config,
+                      tempo_limite_sinal_minutos: parseInt(e.target.value, 10) || 30,
+                    })
+                  }
+                  className="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-semibold"
+                >
+                  <option value="15">15 minutos</option>
+                  <option value="30">30 minutos (Recomendado)</option>
+                  <option value="45">45 minutos</option>
+                  <option value="60">1 hora (60 minutos)</option>
+                  <option value="120">2 horas</option>
+                </select>
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  Se a cliente não enviar o comprovante dentro deste prazo, o robô pode liberar a vaga na agenda para outras clientes.
+                </p>
+              </div>
+
+              {/* Preview da Mensagem enviada pelo Robô */}
+              <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Como o cliente verá no WhatsApp:
+                </span>
+                <p className="text-xs text-zinc-300 font-mono leading-relaxed bg-zinc-950 p-3 rounded-lg border border-zinc-800 whitespace-pre-line">
+                  {`🔒 *GARANTIA DO SEU HORÁRIO*
+Para confirmar com exclusividade o seu atendimento, solicitamos um sinal de:
+💰 *Valor do Sinal:* *R$ ${(
+                    ((config.tipo_sinal ?? "PORCENTAGEM") === "PORCENTAGEM"
+                      ? (45 * (config.sinal_porcentagem ?? 30)) / 100
+                      : (config.sinal_valor_fixo ?? 20)
+                    ).toFixed(2)
+                  ).replace(".", ",")}* _(exemplo num serviço de R$ 45)_
+
+🔑 *CHAVE PIX (Celular):*
+\`${config.chave_pix || "82981430673"}\`
+*Titular:* ${config.titular_pix || "Luisa Alves dos Santos"}
+
+⏳ *Tempo limite:* ${config.tempo_limite_sinal_minutos ?? 30} minutos para enviar o comprovante.`}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Mensagem de Boas-Vindas */}
