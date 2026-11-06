@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, DollarSign, Users, MessageSquare } from "lucide-react";
+import { Calendar, DollarSign, Users, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function BottomNav() {
@@ -11,9 +11,9 @@ export function BottomNav() {
   // Os 4 botões mais importantes para a operação diária no mobile
   const items = [
     { href: "/admin", label: "Agenda", icon: Calendar },
-    { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
     { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign },
     { href: "/admin/clientes", label: "Clientes", icon: Users },
+    { href: "/admin/config", label: "Configurações", icon: Settings },
   ];
 
   return (

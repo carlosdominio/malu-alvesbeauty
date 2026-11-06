@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Clock, Settings } from "lucide-react";
+import { MessageSquare, Sparkles, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function AdminTopNav() {
@@ -10,9 +10,9 @@ export function AdminTopNav() {
 
   // Apenas as opções que NÃO estão na barra de baixo (sem repetição)
   const navItems = [
+    { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
     { href: "/admin/servicos", label: "Serviços", icon: Sparkles },
     { href: "/admin/horarios", label: "Horários", icon: Clock },
-    { href: "/admin/config", label: "Configurações", icon: Settings },
   ];
 
   return (
