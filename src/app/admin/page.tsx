@@ -67,6 +67,7 @@ export default function AgendaPage() {
   const [novoFormaPagamento, setNovoFormaPagamento] = useState<FormaPagamento>("PIX");
   const [novoPrecisaTroco, setNovoPrecisaTroco] = useState(false);
   const [novoTrocoPara, setNovoTrocoPara] = useState("");
+  const [novoTipoFluxo, setNovoTipoFluxo] = useState<"AGENDAR" | "CONCLUIDO">("AGENDAR");
 
   // Data de Hoje
   const hoje = new Date();
@@ -329,6 +330,8 @@ export default function AgendaPage() {
       }
     }
 
+    const statusFinal: StatusAgendamento = novoTipoFluxo === "CONCLUIDO" ? "CONCLUIDO" : "CONFIRMADO";
+
     await fetch("/api/agendamentos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -338,18 +341,27 @@ export default function AgendaPage() {
         servico,
         horario_inicio: `${dataFiltro}T${novoHorario}:00`,
         origem: "MANUAL",
-        status: "CONFIRMADO",
+        status: statusFinal,
         forma_pagamento: novoFormaPagamento,
         observacoes: observacoesFinal || undefined,
       }),
     });
 
-    toastSuccess("Agendamento Criado!", `${novoNome} agendado para às ${novoHorario}.`);
+    if (novoTipoFluxo === "CONCLUIDO") {
+      toastSuccess(
+        "Atendimento Concluído! ✨",
+        `${novoNome} (${formatarMoeda(precoEfetivo)}) lançado diretamente no Caixa Financeiro.`
+      );
+    } else {
+      toastSuccess("Agendamento Criado!", `${novoNome} agendado para às ${novoHorario} na fila da agenda.`);
+    }
+
     setNovoNome("");
     setNovoTelefone("");
     setNovoFormaPagamento("PIX");
     setNovoPrecisaTroco(false);
     setNovoTrocoPara("");
+    setNovoTipoFluxo("AGENDAR");
     setModalNovoAgendamentoAberto(false);
     carregarDados();
   };
@@ -954,6 +966,14 @@ export default function AgendaPage() {
               </div>
             </div>
 
+            {/* Detalhes de Troco ou Observação Prévia */}
+            {agendamentoParaConcluir.observacoes && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-300 flex items-center gap-2">
+                <span>📝</span>
+                <span>{agendamentoParaConcluir.observacoes}</span>
+              </div>
+            )}
+
             {/* Seleção de Forma de Pagamento */}
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-2.5">
@@ -1135,6 +1155,44 @@ export default function AgendaPage() {
         icon={<Plus className="w-5 h-5 text-amber-500" />}
       >
         <form onSubmit={handleCriarAgendamentoManual} className="space-y-3">
+          {/* Seletor: Agendar Horário na Fila vs Atendimento Já Realizado / Pago */}
+          <div className="space-y-1.5 pb-0.5">
+            <label className="text-xs font-bold text-zinc-300 block">Tipo do Atendimento</label>
+            <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-950 border border-zinc-800 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setNovoTipoFluxo("AGENDAR")}
+                className={cn(
+                  "py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                  novoTipoFluxo === "AGENDAR"
+                    ? "bg-amber-500 text-zinc-950 shadow-md font-black"
+                    : "text-zinc-400 hover:text-zinc-200"
+                )}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Agendar na Fila</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNovoTipoFluxo("CONCLUIDO")}
+                className={cn(
+                  "py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                  novoTipoFluxo === "CONCLUIDO"
+                    ? "bg-emerald-500 text-zinc-950 shadow-md font-black"
+                    : "text-zinc-400 hover:text-zinc-200"
+                )}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Já Realizado / Pago</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-400 px-0.5">
+              {novoTipoFluxo === "AGENDAR"
+                ? "📅 Entra na Fila da Agenda no horário marcado e notifica no WhatsApp."
+                : "⚡ Lança imediatamente no Caixa Financeiro e pontua a cliente na fidelidade."}
+            </p>
+          </div>
+
           <div>
             <label className="text-xs font-bold text-zinc-300 block mb-1">Nome do Cliente</label>
             <input
@@ -1322,8 +1380,20 @@ export default function AgendaPage() {
 
           {/* Botão de Ação Sticky (Sempre Visível no Rodapé sem precisar rolar) */}
           <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 p-3 sm:p-4 bg-zinc-900/95 backdrop-blur-md border-t border-zinc-800 flex items-center justify-end z-20 mt-3 rounded-b-3xl">
-            <Button type="submit" variant="gold" size="lg" className="w-full font-bold shadow-lg shadow-amber-500/20 py-2.5 sm:py-3">
-              Adicionar na Agenda
+            <Button
+              type="submit"
+              variant={novoTipoFluxo === "CONCLUIDO" ? "gold" : "gold"}
+              size="lg"
+              className={cn(
+                "w-full font-bold shadow-lg py-2.5 sm:py-3 transition-all",
+                novoTipoFluxo === "CONCLUIDO"
+                  ? "bg-emerald-500 hover:bg-emerald-400 text-zinc-950 border-emerald-400 shadow-emerald-500/20"
+                  : "shadow-amber-500/20"
+              )}
+            >
+              {novoTipoFluxo === "CONCLUIDO"
+                ? "Concluir e Lançar no Financeiro"
+                : "Adicionar na Agenda"}
             </Button>
           </div>
         </form>

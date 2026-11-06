@@ -454,7 +454,7 @@ export const DataStore = {
     const agora = new Date();
     const hojeStr = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
 
-    const agendamentosValidos = agendamentos.filter((ag) => {
+    const agendamentosPeriodo = agendamentos.filter((ag) => {
       if (ag.status === "CANCELADO" || ag.status === "FALTOU") return false;
       const dataAg = ag.horario_inicio.split("T")[0];
 
@@ -476,9 +476,16 @@ export const DataStore = {
       return true;
     });
 
-    const totalAtendimentos = agendamentosValidos.length;
-    const faturamentoTotal = agendamentosValidos.reduce((acc, curr) => acc + (curr.valor_cobrado || 0), 0);
+    // FATURAMENTO REALIZADO (Apenas atendimentos de fato CONCLUÍDOS)
+    const agendamentosConcluidos = agendamentosPeriodo.filter((ag) => ag.status === "CONCLUIDO");
+    const totalAtendimentos = agendamentosConcluidos.length;
+    const faturamentoTotal = agendamentosConcluidos.reduce((acc, curr) => acc + (curr.valor_cobrado || 0), 0);
     const ticketMedio = totalAtendimentos > 0 ? faturamentoTotal / totalAtendimentos : 0;
+
+    // PREVISÃO A RECEBER (Agendamentos confirmados na fila que ainda vão acontecer)
+    const agendamentosNaFila = agendamentosPeriodo.filter((ag) => ag.status === "CONFIRMADO");
+    const previsaoAReceber = agendamentosNaFila.reduce((acc, curr) => acc + (curr.valor_cobrado || 0), 0);
+    const totalNaFila = agendamentosNaFila.length;
 
     const porForma = {
       pix: 0,
@@ -488,7 +495,7 @@ export const DataStore = {
 
     const servicosContador: Record<string, { quantidade: number; total: number }> = {};
 
-    agendamentosValidos.forEach((ag) => {
+    agendamentosConcluidos.forEach((ag) => {
       if (ag.forma_pagamento === "PIX") porForma.pix += ag.valor_cobrado;
       else if (ag.forma_pagamento === "DINHEIRO") porForma.dinheiro += ag.valor_cobrado;
       else if (ag.forma_pagamento === "CARTAO") porForma.cartao += ag.valor_cobrado;
@@ -516,6 +523,8 @@ export const DataStore = {
       total_atendimentos: totalAtendimentos,
       faturamento_total: faturamentoTotal,
       ticket_medio: ticketMedio,
+      previsao_a_receber: previsaoAReceber,
+      total_na_fila: totalNaFila,
       por_forma_pagamento: porForma,
       servicos_mais_vendidos: servicosMaisVendidos,
     };

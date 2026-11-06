@@ -11,6 +11,7 @@ import {
   Award,
   Trash2,
   AlertTriangle,
+  Clock,
 } from "lucide-react";
 import { ResumoFinanceiro } from "@/types";
 import { DataStore } from "@/lib/dataStore";
@@ -130,7 +131,9 @@ export default function FinanceiroPage() {
               <h3 className="text-3xl font-black text-zinc-100 mt-2">
                 {formatarMoeda(resumo.faturamento_total)}
               </h3>
-              <p className="text-[11px] text-zinc-400 mt-1">Total bruto faturado</p>
+              <p className="text-[11px] text-zinc-400 mt-1">
+                Faturamento concluído (em caixa)
+              </p>
             </Card>
 
             {/* Card 2: Total Atendimentos */}
@@ -146,7 +149,7 @@ export default function FinanceiroPage() {
               <h3 className="text-3xl font-black text-zinc-100 mt-2">
                 {resumo.total_atendimentos}
               </h3>
-              <p className="text-[11px] text-zinc-400 mt-1">Clientes atendidos</p>
+              <p className="text-[11px] text-zinc-400 mt-1">Clientes já atendidos</p>
             </Card>
 
             {/* Card 3: Tíquete Médio */}
@@ -165,6 +168,30 @@ export default function FinanceiroPage() {
               <p className="text-[11px] text-zinc-400 mt-1">Média gasta por cliente</p>
             </Card>
           </div>
+
+          {/* Destaque: Previsão a Receber da Fila (quando houver agendamentos confirmados aguardando atendimento) */}
+          {Boolean(resumo.previsao_a_receber && resumo.previsao_a_receber > 0) && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-400 block">
+                    Previsão da Fila ({resumo.total_na_fila} {resumo.total_na_fila === 1 ? "cliente aguardando" : "clientes aguardando"})
+                  </span>
+                  <p className="text-sm font-black text-zinc-100 mt-0.5">
+                    {formatarMoeda(resumo.previsao_a_receber || 0)} a receber de atendimentos confirmados na agenda
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0 hidden sm:block">
+                <span className="text-xs font-bold text-amber-300 bg-amber-500/20 px-3 py-1 rounded-xl border border-amber-500/30">
+                  ⏳ Fila da Agenda
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Formas de Pagamento */}
           <div>

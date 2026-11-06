@@ -132,6 +132,8 @@ export interface ResumoFinanceiro {
   total_atendimentos: number;
   faturamento_total: number;
   ticket_medio: number;
+  previsao_a_receber?: number;
+  total_na_fila?: number;
   por_forma_pagamento: {
     pix: number;
     dinheiro: number;

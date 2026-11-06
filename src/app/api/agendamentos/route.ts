@@ -124,11 +124,17 @@ export async function POST(req: Request) {
         process.env.WHATSAPP_SERVER_URL ||
         process.env.NEXT_PUBLIC_WHATSAPP_SERVER_URL ||
         "https://malu-alvesbeauty.onrender.com";
+      const tipoMensagem =
+        statusInicial === "CONCLUIDO"
+          ? "AGRADECIMENTO_FIDELIDADE"
+          : statusInicial === "AGUARDANDO_SINAL"
+          ? "SOLICITAR_SINAL_WEB"
+          : "CONFIRMACAO_WEB";
       fetch(`${whatsappUrl}/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tipo: statusInicial === "AGUARDANDO_SINAL" ? "SOLICITAR_SINAL_WEB" : "CONFIRMACAO_WEB",
+          tipo: tipoMensagem,
           telefone: cliente_telefone,
           nome: cliente_nome,
           servicoTitulo: servico.titulo,

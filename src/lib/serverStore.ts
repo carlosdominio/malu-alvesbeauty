@@ -254,6 +254,25 @@ export const ServerStore = {
     };
 
     db.agendamentos.push(novoAgendamento);
+
+    // Se o atendimento já foi criado diretamente como CONCLUÍDO (atendimento presencial já pago):
+    if (statusInicial === "CONCLUIDO") {
+      const idxCli = clienteIdx >= 0 ? clienteIdx : db.clientes.length - 1;
+      if (idxCli >= 0 && db.clientes[idxCli]) {
+        const cli = db.clientes[idxCli];
+        cli.total_visitas = (cli.total_visitas || 0) + 1;
+        cli.total_gasto = (cli.total_gasto || 0) + servico.preco;
+        if (!cli.historico_visitas) cli.historico_visitas = [];
+        cli.historico_visitas.push({
+          agendamento_id: novoAgendamento.id,
+          data_hora: horario_inicio,
+          servico_titulo: servico.titulo,
+          valor: servico.preco,
+          forma_pagamento: params.forma_pagamento,
+        });
+      }
+    }
+
     writeDB(db);
     console.log(">>> [ServerStore] Agendamento salvo:", novoAgendamento.cliente_nome, novoAgendamento.horario_inicio, novoAgendamento.status);
 
