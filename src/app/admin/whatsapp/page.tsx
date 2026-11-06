@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 import {
   MENSAGENS_PADRAO,
   RESPOSTAS_PADRAO_EXEMPLOS,
@@ -50,6 +51,7 @@ export default function WhatsAppPage() {
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [expediente, setExpediente] = useState<ExpedienteDia[]>([]);
   const [config, setConfig] = useState<BarbeariaConfig | null>(null);
+  const { toastSuccess, toastWarning, toastInfo } = useToast();
 
   // Sub-abas: Conexão/Simulador, Modelos de Mensagens, Novas Opções Customizadas
   const [subAba, setSubAba] = useState<"CONEXAO" | "MENSAGENS" | "OPCOES">("CONEXAO");
@@ -174,6 +176,7 @@ export default function WhatsAppPage() {
         });
       }
       await checarStatusWhatsApp();
+      toastInfo("Conexão Solicitada 📱", "Iniciando Baileys e gerando QR Code...");
     } catch (err) {
       console.error(err);
     } finally {
@@ -194,6 +197,7 @@ export default function WhatsAppPage() {
         });
       }
       await checarStatusWhatsApp();
+      toastInfo("WhatsApp Desconectado 🔌", "A conexão com o aparelho foi encerrada com sucesso.");
     } catch (err) {
       console.error(err);
     } finally {
@@ -258,8 +262,10 @@ export default function WhatsAppPage() {
       setConfig(novoConfig);
       setMensagemSalvaSucesso(true);
       setTimeout(() => setMensagemSalvaSucesso(false), 3000);
+      toastSuccess("Modelos de Mensagens Salvos! 💬", "Os novos textos automáticos já estão em vigor no atendimento.");
     } catch (err) {
       console.error("Erro ao salvar mensagens do WhatsApp:", err);
+      toastWarning("Erro ao Salvar", "Não foi possível salvar os modelos. Tente novamente.");
     } finally {
       setSalvandoMensagens(false);
     }
@@ -332,6 +338,10 @@ export default function WhatsAppPage() {
     };
     await DataStore.updateConfig(novoConfig);
     setConfig(novoConfig);
+    toastSuccess(
+      editandoOpcao ? "Opção Atualizada! ✏️" : "Nova Opção Criada! ➕",
+      `A opção "${formOpcaoTitulo}" foi sincronizada com o robô.`
+    );
   };
 
   const handleToggleAtivoOpcao = async (id: string) => {
@@ -350,10 +360,12 @@ export default function WhatsAppPage() {
     };
     await DataStore.updateConfig(novoConfig);
     setConfig(novoConfig);
+    toastInfo("Status da Opção Alterado", "A visibilidade da opção no menu foi atualizada.");
   };
 
   const confirmarExcluirOpcao = async () => {
     if (!opcaoParaExcluir) return;
+    const nome = opcaoParaExcluir.titulo;
     const listaAtualizada = respostasCustom.filter((op) => op.id !== opcaoParaExcluir.id);
     setRespostasCustom(listaAtualizada);
     setOpcaoParaExcluir(null);
@@ -368,6 +380,7 @@ export default function WhatsAppPage() {
     };
     await DataStore.updateConfig(novoConfig);
     setConfig(novoConfig);
+    toastWarning("Opção Removida 🗑️", `A opção "${nome}" foi excluída do menu do robô.`);
   };
 
   // Motor conversacional do Bot do WhatsApp

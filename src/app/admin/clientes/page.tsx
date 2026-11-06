@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -26,6 +27,7 @@ export default function ClientesPage() {
   const [loading, setLoading] = useState(true);
   const [modalLimparAberto, setModalLimparAberto] = useState(false);
   const [limpando, setLimpando] = useState(false);
+  const { toastSuccess, toastError } = useToast();
 
   useEffect(() => {
     async function carregar() {
@@ -56,8 +58,13 @@ export default function ClientesPage() {
       await DataStore.limparClientes();
       setClientes([]);
       setModalLimparAberto(false);
+      toastSuccess(
+        "Histórico Limpo com Sucesso! 🗑️",
+        "A lista de clientes e dados do cartão fidelidade foram reiniciados."
+      );
     } catch (err) {
       console.error("Erro ao limpar histórico:", err);
+      toastError("Erro ao Limpar Histórico", "Ocorreu uma falha ao tentar limpar os clientes.");
     } finally {
       setLimpando(false);
     }

@@ -23,6 +23,7 @@ import { calcularSlotsDisponiveis } from "@/lib/appointmentEngine";
 import { cn, formatarData, formatarMoeda } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { ReturningClientBanner } from "@/components/ReturningClientBanner";
+import { ScrollToTopButton } from "@/components/ScrollToTopButton";
 
 export default function AgendarPage() {
   const [config, setConfig] = useState<BarbeariaConfig | null>(null);
@@ -904,6 +905,7 @@ export default function AgendarPage() {
           </div>
         )}
       </main>
+      <ScrollToTopButton />
     </div>
   );
 }

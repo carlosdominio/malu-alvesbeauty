@@ -188,10 +188,22 @@ function obterServicosAtivos() {
   return servicosPadrao;
 }
 
+function obterCumprimentoHorario() {
+  const hora = new Date().getHours();
+  if (hora >= 5 && hora < 12) return "Bom dia";
+  if (hora >= 12 && hora < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
 function formatarMensagemZap(template, vars) {
   let resultado = template;
-  for (const chave in vars) {
-    const val = vars[chave] !== undefined && vars[chave] !== null ? String(vars[chave]) : "";
+  const cumprimento = obterCumprimentoHorario();
+  const varsCompletas = {
+    cumprimento,
+    ...vars,
+  };
+  for (const chave in varsCompletas) {
+    const val = varsCompletas[chave] !== undefined && varsCompletas[chave] !== null ? String(varsCompletas[chave]) : "";
     resultado = resultado.split(`{${chave}}`).join(val);
   }
   return resultado;
@@ -573,8 +585,9 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       } else if (textoLimpo === "3" || textoLimpo.includes("dono") || textoLimpo.includes("designer") || textoLimpo.includes("atendente")) {
         resposta = `👩‍💼 Um momento, ${nomeDetectado}! Já avisei a designer e ela irá falar com você em instantes.`;
       } else {
+        const cumprimento = obterCumprimentoHorario();
         resposta =
-          `✨ *Olá ${nomeDetectado}!* ✨\n\n` +
+          `✨ *${cumprimento}, ${nomeDetectado}!* ✨\n\n` +
           `📅 *Você já possui um agendamento confirmado:*\n` +
           `• *${agendamentoAtivo.servico_titulo}*\n` +
           `• *Data:* ${dataStr} às *${horaStr}*\n` +
@@ -608,8 +621,9 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
           };
           const listaDias = diasDisponiveis.map((d, i) => `*${i + 1}* - ${d.rotulo}`).join("\n");
 
+          const cumprimento = obterCumprimentoHorario();
           resposta =
-            `Olá *${nomeDetectado}*! ✨\n` +
+            `✨ *${cumprimento}, ${nomeDetectado}!* ✨\n` +
             `Vamos marcar seu *${ultimoSrv.titulo}* (${formatarMoeda(ultimoSrv.preco)})?\n\n` +
             `📅 *Escolha o dia:*\n\n${listaDias}\n\n` +
             `_Digite o número do dia (ou digite *Outro* para mudar o procedimento):_`;
@@ -639,13 +653,15 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
             linhasCustom = "\n" + customizadas.map((r, i) => `*${r.opcao_numero || i + 4}* ➔ ${r.titulo}`).join("\n");
           }
 
+          const cumprimento = obterCumprimentoHorario();
           const saudacao = clienteCadastrado
-            ? `Olá ${nomeDetectado}! Que bom ter você de volta! ✨ (${clienteCadastrado.total_visitas || 1} atendimentos no Cartão Fidelidade ⭐)`
-            : `Olá, ${nomeDetectado}! Bem-vinda ao Studio Malu Alves Beauty! ✨`;
+            ? `${cumprimento}, ${nomeDetectado}! Que bom ter você de volta! ✨ (${clienteCadastrado.total_visitas || 1} atendimentos no Cartão Fidelidade ⭐)`
+            : `${cumprimento}, ${nomeDetectado}! Bem-vinda ao Studio Malu Alves Beauty! ✨`;
 
           if (db.config?.mensagens_zap?.boas_vindas) {
             resposta = formatarMensagemZap(db.config.mensagens_zap.boas_vindas, {
               cliente: nomeDetectado,
+              cumprimento,
               saudacao,
               opcoes_personalizadas: linhasCustom.trim(),
             });

@@ -1,9 +1,16 @@
 import { BarbeariaConfig, MensagensWhatsAppConfig, RespostaAutomatica, Servico } from "@/types";
 import { formatarMoeda } from "./utils";
 
+export function obterCumprimentoHorario(data: Date = new Date()): string {
+  const hora = data.getHours();
+  if (hora >= 5 && hora < 12) return "Bom dia";
+  if (hora >= 12 && hora < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
 export const MENSAGENS_PADRAO: Required<Omit<MensagensWhatsAppConfig, "respostas_personalizadas">> = {
   boas_vindas:
-    `✨ *Olá! Bem-vinda ao Studio Malu Alves Beauty!* ✨\n\n` +
+    `✨ *{cumprimento}! Bem-vinda ao Studio Malu Alves Beauty!* ✨\n\n` +
     `Eu sou a assistente virtual. Como posso te ajudar hoje?\n\n` +
     `*1* ➔ Agendar um Horário\n` +
     `*2* ➔ Ver Nossos Procedimentos e Valores\n` +
@@ -105,7 +112,13 @@ export function formatarMensagem(
   variaveis: Record<string, string | number | undefined>
 ): string {
   let resultado = template;
-  for (const [chave, valor] of Object.entries(variaveis)) {
+  const cumprimentoPadrao = obterCumprimentoHorario();
+  const varsCompletas = {
+    cumprimento: cumprimentoPadrao,
+    ...variaveis,
+  };
+
+  for (const [chave, valor] of Object.entries(varsCompletas)) {
     const safeVal = valor !== undefined && valor !== null ? String(valor) : "";
     resultado = resultado.split(`{${chave}}`).join(safeVal);
   }
@@ -132,10 +145,12 @@ export function gerarTextoBoasVindas(
   }
 
   const template = mensagensZap?.boas_vindas || MENSAGENS_PADRAO.boas_vindas;
-  const saudacaoCliente = nomeCliente ? `Olá, *${nomeCliente}*!` : `Olá!`;
+  const cumprimento = obterCumprimentoHorario();
+  const saudacaoCliente = nomeCliente ? `${cumprimento}, *${nomeCliente}*!` : `${cumprimento}!`;
 
   return formatarMensagem(template, {
     cliente: nomeCliente || "Cliente",
+    cumprimento,
     saudacao: saudacaoCliente,
     opcoes_personalizadas: blocoOpcoes,
   }).replace(/\n{3,}/g, "\n\n");

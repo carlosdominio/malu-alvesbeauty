@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { AdminTopNav } from "@/components/AdminTopNav";
 import { BottomNav } from "@/components/BottomNav";
+import { ScrollToTopButton } from "@/components/ScrollToTopButton";
 import { ToastProvider } from "@/components/ui/Toast";
 import { DataStore } from "@/lib/dataStore";
 import { BarbeariaConfig } from "@/types";
@@ -61,6 +62,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Header nomeBarbearia={config?.nome_barbearia} isAdmin={true} />
         <AdminTopNav />
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6">{children}</main>
+        <ScrollToTopButton />
         <BottomNav />
       </div>
     </ToastProvider>

@@ -7,6 +7,7 @@ import { DataStore } from "@/lib/dataStore";
 import { formatarMoeda, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 
 export default function ServicosPage() {
   const [servicos, setServicos] = useState<Servico[]>([]);
@@ -14,6 +15,7 @@ export default function ServicosPage() {
   const [modalAberto, setModalAberto] = useState(false);
   const [editandoServico, setEditandoServico] = useState<Servico | null>(null);
   const [servicoParaExcluir, setServicoParaExcluir] = useState<Servico | null>(null);
+  const { toastSuccess, toastWarning, toastInfo } = useToast();
 
   // Form states
   const [titulo, setTitulo] = useState("");
@@ -73,18 +75,25 @@ export default function ServicosPage() {
     });
     setModalAberto(false);
     carregarServicos();
+    toastSuccess(
+      editandoServico ? "Procedimento Atualizado! ✨" : "Novo Procedimento Criado! ✨",
+      `${titulo} foi salvo no catálogo com sucesso.`
+    );
   };
 
   const handleToggleAtivo = async (id: string) => {
     await DataStore.toggleServicoAtivo(id);
     carregarServicos();
+    toastInfo("Visibilidade Alterada", "O status de exibição do serviço foi atualizado.");
   };
 
   const confirmarExclusao = async () => {
     if (!servicoParaExcluir) return;
+    const nome = servicoParaExcluir.titulo;
     await DataStore.deleteServico(servicoParaExcluir.id);
     setServicoParaExcluir(null);
     carregarServicos();
+    toastWarning("Procedimento Removido 🗑️", `${nome} foi excluído do catálogo.`);
   };
 
   return (

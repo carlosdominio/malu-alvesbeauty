@@ -5,6 +5,7 @@ import { Check, Save } from "lucide-react";
 import { DiaSemana, ExpedienteDia } from "@/types";
 import { DataStore } from "@/lib/dataStore";
 import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 
 const DIAS_NOMES = [
@@ -21,6 +22,7 @@ export default function HorariosPage() {
   const [expedientes, setExpedientes] = useState<ExpedienteDia[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
+  const { toastSuccess, toastError } = useToast();
 
   useEffect(() => {
     DataStore.getExpediente().then(setExpedientes);
@@ -49,9 +51,10 @@ export default function HorariosPage() {
       }
       setSucesso(true);
       setTimeout(() => setSucesso(false), 3000);
+      toastSuccess("Horários Salvos! ⏰", "A jornada e horário de expediente foram atualizados com sucesso.");
     } catch (e) {
       console.error("Erro ao salvar:", e);
-      alert("Erro ao salvar horários. Tente novamente.");
+      toastError("Erro ao Salvar Horários", "Não foi possível sincronizar os horários. Tente novamente.");
     } finally {
       setSalvando(false);
     }
