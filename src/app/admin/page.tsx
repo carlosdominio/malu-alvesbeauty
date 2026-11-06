@@ -18,10 +18,20 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
-import { Agendamento, BarbeariaConfig, Cliente, FormaPagamento, Servico, StatusAgendamento } from "@/types";
+import {
+  Agendamento,
+  BarbeariaConfig,
+  BloqueioAgenda,
+  Cliente,
+  ExpedienteDia,
+  FormaPagamento,
+  Servico,
+  StatusAgendamento,
+} from "@/types";
 import { DataStore } from "@/lib/dataStore";
 import { SoundNotification } from "@/lib/audioNotification";
 import { formatarMoeda, formatarTelefone, cn } from "@/lib/utils";
+import { calcularSlotsDisponiveis } from "@/lib/appointmentEngine";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
@@ -68,6 +78,10 @@ export default function AgendaPage() {
   const [novoPrecisaTroco, setNovoPrecisaTroco] = useState(false);
   const [novoTrocoPara, setNovoTrocoPara] = useState("");
   const [novoTipoFluxo, setNovoTipoFluxo] = useState<"AGENDAR" | "CONCLUIDO">("AGENDAR");
+  const [novoData, setNovoData] = useState<string>("");
+
+  const [expediente, setExpediente] = useState<ExpedienteDia[]>([]);
+  const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
 
   // Data de Hoje
   const hoje = new Date();
@@ -83,11 +97,13 @@ export default function AgendaPage() {
     if (!dataFiltro) return;
     if (!silencioso) setLoading(true);
     try {
-      const [resAg, resCli, srvs, cfg] = await Promise.all([
+      const [resAg, resCli, srvs, cfg, exp, blq] = await Promise.all([
         fetch(`/api/agendamentos?data=${dataFiltro}`, { cache: "no-store" }),
         fetch(`/api/clientes`, { cache: "no-store" }),
         DataStore.getServicos(),
         DataStore.getConfig(),
+        DataStore.getExpediente(),
+        DataStore.getBloqueios(),
       ]);
 
       if (resAg.ok) {
@@ -150,6 +166,8 @@ export default function AgendaPage() {
       }
       setServicos(srvs.filter((s) => s.ativo));
       setConfig(cfg);
+      setExpediente(exp);
+      setBloqueios(blq);
       if (srvs.length > 0 && !novoServicoId) {
         setNovoServicoId(srvs[0].id);
       }
@@ -310,7 +328,7 @@ export default function AgendaPage() {
     const trocoParaNum = parseFloat(novoTrocoPara.replace(",", ".")) || 0;
     let observacoesFinal = "";
 
-    if (novoFormaPagamento === "DINHEIRO") {
+    if (novoTipoFluxo === "CONCLUIDO" && novoFormaPagamento === "DINHEIRO") {
       if (novoPrecisaTroco) {
         if (trocoParaNum <= 0) {
           toastWarning("Informe o Valor", "Por favor, informe a quantia em dinheiro para calcular o troco.");
@@ -330,7 +348,29 @@ export default function AgendaPage() {
       }
     }
 
-    const statusFinal: StatusAgendamento = novoTipoFluxo === "CONCLUIDO" ? "CONCLUIDO" : "CONFIRMADO";
+    const dataAlvoManual = novoTipoFluxo === "AGENDAR" ? (novoData || dataFiltro || hojeStr) : (dataFiltro || hojeStr);
+    const exigeSinal = config?.exigir_sinal ?? true;
+    const statusFinal: StatusAgendamento =
+      novoTipoFluxo === "CONCLUIDO"
+        ? "CONCLUIDO"
+        : exigeSinal
+        ? "AGUARDANDO_SINAL"
+        : "CONFIRMADO";
+
+    let valorSinalManual: number | undefined = undefined;
+    if (statusFinal === "AGUARDANDO_SINAL") {
+      if (config?.tipo_sinal === "FIXO") {
+        valorSinalManual = config.sinal_valor_fixo || 20;
+      } else {
+        const pct = config?.sinal_porcentagem || 30;
+        valorSinalManual = Math.round((precoEfetivo * pct) / 100);
+      }
+    }
+
+    if (novoTipoFluxo === "AGENDAR" && !novoHorario) {
+      toastWarning("Selecione um Horário", "Por favor, selecione um dos horários disponíveis na lista.");
+      return;
+    }
 
     await fetch("/api/agendamentos", {
       method: "POST",
@@ -339,10 +379,11 @@ export default function AgendaPage() {
         cliente_nome: novoNome,
         cliente_telefone: novoTelefone,
         servico,
-        horario_inicio: `${dataFiltro}T${novoHorario}:00`,
+        horario_inicio: `${dataAlvoManual}T${novoHorario}:00`,
         origem: "MANUAL",
         status: statusFinal,
-        forma_pagamento: novoFormaPagamento,
+        forma_pagamento: novoTipoFluxo === "CONCLUIDO" ? novoFormaPagamento : "PIX",
+        valor_sinal: valorSinalManual,
         observacoes: observacoesFinal || undefined,
       }),
     });
@@ -351,6 +392,11 @@ export default function AgendaPage() {
       toastSuccess(
         "Atendimento Concluído! ✨",
         `${novoNome} (${formatarMoeda(precoEfetivo)}) lançado diretamente no Caixa Financeiro.`
+      );
+    } else if (statusFinal === "AGUARDANDO_SINAL") {
+      toastSuccess(
+        "Aguardando Sinal PIX! ⏳",
+        `${novoNome} aguardando sinal de ${formatarMoeda(valorSinalManual || 0)}. Notificação com a chave PIX enviada no WhatsApp!`
       );
     } else {
       toastSuccess("Agendamento Criado!", `${novoNome} agendado para às ${novoHorario} na fila da agenda.`);
@@ -386,13 +432,40 @@ export default function AgendaPage() {
     return true; // "TODOS"
   });
 
-  // Cálculo de Troco para o Agendamento Manual
+  // Cálculo de Troco, Slots e Sinal para o Agendamento Manual
   const servicoManualSelecionado = servicos.find((s) => s.id === novoServicoId) || servicos[0];
   const precoCobradoManual = servicoManualSelecionado
     ? servicoManualSelecionado.em_promocao && servicoManualSelecionado.preco_promocional
       ? servicoManualSelecionado.preco_promocional
       : servicoManualSelecionado.preco
     : 0;
+
+  const dataAlvoManual = novoData || dataFiltro || hojeStr;
+
+  // Slots livres calculados para a data selecionada
+  const slotsResultado = servicoManualSelecionado && dataAlvoManual && expediente.length > 0
+    ? calcularSlotsDisponiveis({
+        data: dataAlvoManual,
+        servico: servicoManualSelecionado,
+        expedientes: expediente,
+        agendamentosExistentes: agendamentos,
+        bloqueios,
+        tempoBufferMinutos: config?.tempo_buffer_minutos || 5,
+        limiteMaximoDia: config?.limite_maximo_agendamentos_dia || 15,
+      })
+    : { slots: [], aberto: true };
+
+  const slotsLivres = slotsResultado.slots.filter((s) => s.disponivel);
+
+  let valorSinalManual = 0;
+  if (config?.exigir_sinal) {
+    if (config.tipo_sinal === "FIXO") {
+      valorSinalManual = config.sinal_valor_fixo || 20;
+    } else {
+      const pct = config?.sinal_porcentagem || 30;
+      valorSinalManual = Math.round((precoCobradoManual * pct) / 100);
+    }
+  }
 
   const valorTrocoParaNum = parseFloat(novoTrocoPara.replace(",", ".")) || 0;
   const valorTrocoCalculado = Math.max(0, valorTrocoParaNum - precoCobradoManual);
@@ -1217,165 +1290,288 @@ export default function AgendaPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className="text-xs font-bold text-zinc-300 block mb-1">Serviço</label>
-              <select
-                value={novoServicoId}
-                onChange={(e) => setNovoServicoId(e.target.value)}
-                className="w-full px-2.5 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs sm:text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-              >
-                {servicos.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.titulo} ({formatarMoeda(s.preco)})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-zinc-300 block mb-1">Horário</label>
-              <input
-                type="time"
-                required
-                value={novoHorario}
-                onChange={(e) => setNovoHorario(e.target.value)}
-                className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-          </div>
-
-          {/* Forma de Pagamento */}
-          <div>
-            <label className="text-xs font-bold text-zinc-300 block mb-1.5">Forma de Pagamento</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  { id: "PIX", label: "PIX", icon: "⚡" },
-                  { id: "DINHEIRO", label: "Dinheiro", icon: "💵" },
-                  { id: "CARTAO", label: "Cartão", icon: "💳" },
-                ] as { id: FormaPagamento; label: string; icon: string }[]
-              ).map((f) => {
-                const isSel = novoFormaPagamento === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => {
-                      setNovoFormaPagamento(f.id);
-                      if (f.id !== "DINHEIRO") {
-                        setNovoPrecisaTroco(false);
-                        setNovoTrocoPara("");
-                      }
-                    }}
-                    className={cn(
-                      "py-2 px-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 select-none",
-                      isSel
-                        ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/20 font-black"
-                        : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-850"
-                    )}
-                  >
-                    <span>{f.icon}</span>
-                    <span>{f.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Opção de Troco para Dinheiro (Compacta e Otimizada) */}
-          {novoFormaPagamento === "DINHEIRO" && (
-            <div className="p-3 rounded-2xl bg-zinc-950/90 border border-zinc-800 space-y-2.5 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between">
+          {novoTipoFluxo === "AGENDAR" ? (
+            <>
+              {/* Modo: Agendar na Fila (Fluxo Padrão com validação de dias e horários livres) */}
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <span className="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
-                    <span>🪙</span> Precisa de troco?
-                  </span>
-                  <p className="text-[11px] text-zinc-500">
-                    Total a pagar:{" "}
-                    <strong className="text-amber-400 font-bold">
-                      {formatarMoeda(precoCobradoManual)}
-                    </strong>
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+                  <label className="text-xs font-bold text-zinc-300 block mb-1">Data</label>
                   <input
-                    type="checkbox"
-                    checked={novoPrecisaTroco}
+                    type="date"
+                    required
+                    min={hojeStr}
+                    value={dataAlvoManual}
                     onChange={(e) => {
-                      setNovoPrecisaTroco(e.target.checked);
-                      if (!e.target.checked) setNovoTrocoPara("");
+                      setNovoData(e.target.value);
+                      setNovoHorario("");
                     }}
-                    className="sr-only peer"
+                    className="w-full px-2.5 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs sm:text-sm text-zinc-100 focus:outline-none focus:border-amber-500 font-bold cursor-pointer"
                   />
-                  <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                </label>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-zinc-300 block mb-1">Serviço</label>
+                  <select
+                    value={novoServicoId}
+                    onChange={(e) => {
+                      setNovoServicoId(e.target.value);
+                      setNovoHorario("");
+                    }}
+                    className="w-full px-2.5 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs sm:text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+                  >
+                    {servicos.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.titulo} ({formatarMoeda(s.preco)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {novoPrecisaTroco && (
-                <div className="space-y-2 pt-2 border-t border-zinc-800/80">
-                  <div className="flex items-center justify-between gap-1">
-                    <label className="text-xs font-bold text-zinc-300">
-                      Troco para quanto?
-                    </label>
-                    {/* Atalhos Rápidos de Cédulas alinhados ao lado do label */}
-                    <div className="flex items-center gap-1">
-                      {[20, 50, 100, 200]
-                        .filter((val) => val >= precoCobradoManual)
-                        .map((val) => (
-                          <button
-                            key={val}
-                            type="button"
-                            onClick={() => setNovoTrocoPara(String(val))}
-                            className={cn(
-                              "px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors",
-                              novoTrocoPara === String(val)
-                                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                            )}
-                          >
-                            R$ {val}
-                          </button>
-                        ))}
-                    </div>
+              {/* Horários Livres Disponíveis */}
+              <div>
+                {!slotsResultado.aberto ? (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 font-bold flex items-center gap-2">
+                    <span>🔴</span>
+                    <span>Studio Fechado: {slotsResultado.motivoFechado || "Não abrimos neste dia da semana."}</span>
                   </div>
-
-                  {/* Input de Valor + Badge de Devolução Compacto Lado a Lado */}
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">
-                        R$
+                ) : slotsResultado.lotado ? (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 font-bold flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>Lotação Máxima Atingida: Limite diário de agendamentos atingido.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Horários Disponíveis</span>
+                      </label>
+                      <span className="text-[11px] font-bold text-amber-400">
+                        {slotsLivres.length} {slotsLivres.length === 1 ? "vaga livre" : "vagas livres"}
                       </span>
-                      <input
-                        type="number"
-                        step="any"
-                        min={precoCobradoManual}
-                        placeholder={String(Math.ceil((precoCobradoManual + 10) / 10) * 10 || 50)}
-                        value={novoTrocoPara}
-                        onChange={(e) => setNovoTrocoPara(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 font-bold focus:outline-none focus:border-amber-500"
-                        required={novoPrecisaTroco}
-                      />
                     </div>
 
-                    {valorTrocoParaNum > 0 && !trocoInsuficiente && (
-                      <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-extrabold shrink-0 text-center flex flex-col justify-center">
-                        <span className="text-[10px] text-emerald-400/80 uppercase tracking-wider font-semibold">Devolver</span>
-                        <span className="text-sm font-black text-emerald-400 leading-tight">
-                          {formatarMoeda(valorTrocoCalculado)}
-                        </span>
+                    {slotsLivres.length === 0 ? (
+                      <p className="text-xs text-zinc-400 py-1.5 px-2 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
+                        Nenhum horário livre restante para este serviço na data selecionada.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-28 overflow-y-auto p-1.5 bg-zinc-950 rounded-xl border border-zinc-800">
+                        {slotsLivres.map((slot) => {
+                          const isSel = novoHorario === slot.hora_inicio;
+                          return (
+                            <button
+                              key={slot.hora_inicio}
+                              type="button"
+                              onClick={() => setNovoHorario(slot.hora_inicio)}
+                              className={cn(
+                                "py-1.5 px-1 rounded-lg text-xs font-bold text-center border transition-all",
+                                isSel
+                                  ? "bg-amber-500 text-zinc-950 border-amber-400 font-black shadow-md shadow-amber-500/25"
+                                  : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:text-white"
+                              )}
+                            >
+                              {slot.hora_inicio}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
+                )}
+              </div>
 
-                  {trocoInsuficiente && (
-                    <p className="text-[11px] text-red-400 font-bold">
-                      ⚠️ Menor que o serviço ({formatarMoeda(precoCobradoManual)})
-                    </p>
+              {/* Informações do Sinal PIX (Anti-Falta) */}
+              {config?.exigir_sinal ? (
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-extrabold text-amber-300">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      <span>Sinal Antecipado (Apenas PIX):</span>
+                    </span>
+                    <span className="text-sm font-black text-amber-400">
+                      {formatarMoeda(valorSinalManual)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    Ao confirmar, o agendamento entrará na <strong>Fila de Sinal</strong>. A cliente receberá a chave PIX no WhatsApp para transferir o sinal e garantir o horário.
+                  </p>
+                  <div className="text-[11px] text-zinc-400 pt-1 border-t border-amber-500/20 flex items-center justify-between">
+                    <span>Restante no studio ({formatarMoeda(precoCobradoManual - valorSinalManual)}):</span>
+                    <span className="font-bold text-zinc-300">Pago na hora (Pix, Dinheiro ou Cartão)</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-400">
+                  ✅ Entrará direto na Fila de Confirmados (Sinal desativado nas configurações).
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Modo: Atendimento Já Realizado / Já Pago no Studio */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-xs font-bold text-zinc-300 block mb-1">Serviço</label>
+                  <select
+                    value={novoServicoId}
+                    onChange={(e) => setNovoServicoId(e.target.value)}
+                    className="w-full px-2.5 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs sm:text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+                  >
+                    {servicos.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.titulo} ({formatarMoeda(s.preco)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-zinc-300 block mb-1">Horário do Atendimento</label>
+                  <input
+                    type="time"
+                    required
+                    value={novoHorario}
+                    onChange={(e) => setNovoHorario(e.target.value)}
+                    className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Forma de Pagamento */}
+              <div>
+                <label className="text-xs font-bold text-zinc-300 block mb-1.5">Forma de Pagamento</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { id: "PIX", label: "PIX", icon: "⚡" },
+                      { id: "DINHEIRO", label: "Dinheiro", icon: "💵" },
+                      { id: "CARTAO", label: "Cartão", icon: "💳" },
+                    ] as { id: FormaPagamento; label: string; icon: string }[]
+                  ).map((f) => {
+                    const isSel = novoFormaPagamento === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          setNovoFormaPagamento(f.id);
+                          if (f.id !== "DINHEIRO") {
+                            setNovoPrecisaTroco(false);
+                            setNovoTrocoPara("");
+                          }
+                        }}
+                        className={cn(
+                          "py-2 px-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 select-none",
+                          isSel
+                            ? "bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/20 font-black"
+                            : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-850"
+                        )}
+                      >
+                        <span>{f.icon}</span>
+                        <span>{f.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Opção de Troco para Dinheiro (Compacta e Otimizada) */}
+              {novoFormaPagamento === "DINHEIRO" && (
+                <div className="p-3 rounded-2xl bg-zinc-950/90 border border-zinc-800 space-y-2.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+                        <span>🪙</span> Precisa de troco?
+                      </span>
+                      <p className="text-[11px] text-zinc-500">
+                        Total a pagar:{" "}
+                        <strong className="text-amber-400 font-bold">
+                          {formatarMoeda(precoCobradoManual)}
+                        </strong>
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={novoPrecisaTroco}
+                        onChange={(e) => {
+                          setNovoPrecisaTroco(e.target.checked);
+                          if (!e.target.checked) setNovoTrocoPara("");
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                    </label>
+                  </div>
+
+                  {novoPrecisaTroco && (
+                    <div className="space-y-2 pt-2 border-t border-zinc-800/80">
+                      <div className="flex items-center justify-between gap-1">
+                        <label className="text-xs font-bold text-zinc-300">
+                          Troco para quanto?
+                        </label>
+                        {/* Atalhos Rápidos de Cédulas alinhados ao lado do label */}
+                        <div className="flex items-center gap-1">
+                          {[20, 50, 100, 200]
+                            .filter((val) => val >= precoCobradoManual)
+                            .map((val) => (
+                              <button
+                                key={val}
+                                type="button"
+                                onClick={() => setNovoTrocoPara(String(val))}
+                                className={cn(
+                                  "px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors",
+                                  novoTrocoPara === String(val)
+                                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                                )}
+                              >
+                                R$ {val}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+
+                      {/* Input de Valor + Badge de Devolução Compacto Lado a Lado */}
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">
+                            R$
+                          </span>
+                          <input
+                            type="number"
+                            step="any"
+                            min={precoCobradoManual}
+                            placeholder={String(Math.ceil((precoCobradoManual + 10) / 10) * 10 || 50)}
+                            value={novoTrocoPara}
+                            onChange={(e) => setNovoTrocoPara(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-100 font-bold focus:outline-none focus:border-amber-500"
+                            required={novoPrecisaTroco}
+                          />
+                        </div>
+
+                        {valorTrocoParaNum > 0 && !trocoInsuficiente && (
+                          <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-extrabold shrink-0 text-center flex flex-col justify-center">
+                            <span className="text-[10px] text-emerald-400/80 uppercase tracking-wider font-semibold">Devolver</span>
+                            <span className="text-sm font-black text-emerald-400 leading-tight">
+                              {formatarMoeda(valorTrocoCalculado)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {trocoInsuficiente && (
+                        <p className="text-[11px] text-red-400 font-bold">
+                          ⚠️ Menor que o serviço ({formatarMoeda(precoCobradoManual)})
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
-            </div>
+            </>
           )}
 
           {/* Botão de Ação Sticky (Sempre Visível no Rodapé sem precisar rolar) */}
