@@ -17,6 +17,7 @@ export default function ConfigPage() {
   // Estados de Limpeza de Dados
   const [modalLimparAberto, setModalLimparAberto] = useState(false);
   const [limpando, setLimpando] = useState(false);
+  const [tipoLimpeza, setTipoLimpeza] = useState<"TODOS" | "CANCELADOS">("TODOS");
 
   const { toastSuccess, toastWarning } = useToast();
 
@@ -343,7 +344,10 @@ export default function ConfigPage() {
           <Button
             variant="danger"
             size="sm"
-            onClick={() => setModalLimparAberto(true)}
+            onClick={() => {
+              setTipoLimpeza("TODOS");
+              setModalLimparAberto(true);
+            }}
             className="flex items-center justify-center gap-2 text-xs font-bold py-2.5"
           >
             <Trash2 className="w-4 h-4" />
@@ -353,7 +357,10 @@ export default function ConfigPage() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => handleExecutarLimpeza("CANCELADOS")}
+            onClick={() => {
+              setTipoLimpeza("CANCELADOS");
+              setModalLimparAberto(true);
+            }}
             loading={limpando}
             className="flex items-center justify-center gap-2 text-xs font-bold py-2.5 text-zinc-300"
           >
@@ -367,9 +374,14 @@ export default function ConfigPage() {
       <Modal
         isOpen={modalLimparAberto}
         onClose={() => setModalLimparAberto(false)}
-        title="Zerar Agendamentos de Teste"
-        description="Atenção: esta ação apagará os atendimentos de teste"
+        title={tipoLimpeza === "TODOS" ? "Zerar Agendamentos de Teste" : "Limpar Cancelados e Faltas"}
+        description={
+          tipoLimpeza === "TODOS"
+            ? "Atenção: esta ação apagará os atendimentos registrados no painel."
+            : "Esta ação removerá do histórico os atendimentos cancelados ou com falta."
+        }
         icon={<Trash2 className="w-5 h-5 text-red-400" />}
+        maxWidth="sm"
       >
         <div className="space-y-4">
           <div className="p-4 rounded-2xl bg-red-950/20 border border-red-900/40 flex items-start gap-3">
@@ -377,7 +389,9 @@ export default function ConfigPage() {
             <div className="space-y-1">
               <h4 className="text-sm font-bold text-red-200">Atenção: Ação Irreversível</h4>
               <p className="text-xs text-red-300/80 leading-relaxed">
-                Isso irá apagar todos os agendamentos registrados no painel para deixar a agenda 100% limpa para a inauguração. Seus <strong>Serviços</strong>, <strong>Preços</strong> e <strong>Horários</strong> permanecerão salvos.
+                {tipoLimpeza === "TODOS"
+                  ? "Isso irá apagar todos os agendamentos registrados no painel para deixar a agenda 100% limpa para a inauguração. Seus Serviços, Preços e Horários permanecerão salvos."
+                  : "Isso irá remover da listagem todos os agendamentos cancelados ou marcados como falta, mantendo os confirmados e concluídos."}
               </p>
             </div>
           </div>
@@ -396,10 +410,10 @@ export default function ConfigPage() {
               variant="danger"
               size="md"
               loading={limpando}
-              onClick={() => handleExecutarLimpeza("TODOS")}
+              onClick={() => handleExecutarLimpeza(tipoLimpeza)}
               className="text-xs font-bold shadow-lg shadow-red-500/20"
             >
-              Sim, Limpar Tudo
+              {tipoLimpeza === "TODOS" ? "Sim, Limpar Tudo" : "Sim, Limpar Cancelados"}
             </Button>
           </div>
         </div>

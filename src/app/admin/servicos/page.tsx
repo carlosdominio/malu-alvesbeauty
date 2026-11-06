@@ -13,6 +13,7 @@ export default function ServicosPage() {
   const [loading, setLoading] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
   const [editandoServico, setEditandoServico] = useState<Servico | null>(null);
+  const [servicoParaExcluir, setServicoParaExcluir] = useState<Servico | null>(null);
 
   // Form states
   const [titulo, setTitulo] = useState("");
@@ -68,11 +69,11 @@ export default function ServicosPage() {
     carregarServicos();
   };
 
-  const handleExcluir = async (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este serviço?")) {
-      await DataStore.deleteServico(id);
-      carregarServicos();
-    }
+  const confirmarExclusao = async () => {
+    if (!servicoParaExcluir) return;
+    await DataStore.deleteServico(servicoParaExcluir.id);
+    setServicoParaExcluir(null);
+    carregarServicos();
   };
 
   return (
@@ -159,9 +160,9 @@ export default function ServicosPage() {
                   </button>
 
                   <button
-                    onClick={() => handleExcluir(s.id)}
+                    onClick={() => setServicoParaExcluir(s)}
                     className="p-2 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                    title="Excluir"
+                    title="Excluir Procedimento"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -243,6 +244,68 @@ export default function ServicosPage() {
             Salvar Serviço
           </Button>
         </form>
+      </Modal>
+
+      {/* MODAL PERSONALIZADO DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      <Modal
+        isOpen={!!servicoParaExcluir}
+        onClose={() => setServicoParaExcluir(null)}
+        title="Excluir Procedimento?"
+        description="Esta ação removerá o serviço da agenda e do catálogo online."
+        icon={<Trash2 className="w-5 h-5 text-red-400" />}
+        maxWidth="sm"
+      >
+        {servicoParaExcluir && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-zinc-950/80 border border-red-500/20 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-amber-500">
+                  Procedimento
+                </span>
+                <h4 className="font-extrabold text-white text-base mt-0.5">
+                  {servicoParaExcluir.titulo}
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Duração: {servicoParaExcluir.duracao_minutos} min
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">
+                  Preço
+                </span>
+                <p className="text-base font-black text-amber-400 mt-0.5">
+                  {formatarMoeda(servicoParaExcluir.preco)}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-red-950/30 border border-red-900/40 text-xs text-red-300 leading-relaxed flex items-start gap-2.5">
+              <span className="text-base leading-none">⚠️</span>
+              <span>
+                Tem certeza que deseja apagar <strong>{servicoParaExcluir.titulo}</strong>? Novas clientes não poderão mais selecioná-lo no agendamento.
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={() => setServicoParaExcluir(null)}
+                className="flex-1 text-zinc-400 hover:text-white"
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                onClick={confirmarExclusao}
+                className="flex-1 font-bold shadow-lg shadow-red-500/20"
+              >
+                Sim, Excluir
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
