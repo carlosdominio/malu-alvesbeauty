@@ -398,11 +398,11 @@ export default function WhatsAppPage() {
               variant="gold"
               size="sm"
               onClick={handleIniciarConexao}
-              loading={carregandoAcao || statusConexao === "CONNECTING"}
+              loading={carregandoAcao || (statusConexao === "CONNECTING" && !qrCodeBase64)}
               className="flex items-center gap-1.5 text-xs font-bold"
             >
               <QrCode className="w-3.5 h-3.5" />
-              <span>{statusConexao === "CONNECTING" ? "Gerando QR Code..." : "Gerar QR Code Real"}</span>
+              <span>{statusConexao === "CONNECTING" && !qrCodeBase64 ? "Conectando..." : statusConexao === "CONNECTING" ? "Atualizar QR Code" : "Gerar QR Code Real"}</span>
             </Button>
           )}
         </div>
@@ -421,7 +421,7 @@ export default function WhatsAppPage() {
                 <div>
                   <h4 className="text-sm font-bold text-zinc-100">Status do WhatsApp</h4>
                   <p className="text-xs text-zinc-400 font-mono">
-                    {telefoneConectado ? formatarTelefone(telefoneConectado) : "Aguardando pareamento"}
+                    {telefoneConectado ? formatarTelefone(telefoneConectado) : statusConexao === "CONNECTING" && !qrCodeBase64 ? "Restabelecendo..." : "Aguardando pareamento"}
                   </p>
                 </div>
               </div>
@@ -432,10 +432,16 @@ export default function WhatsAppPage() {
                   Conectado
                 </Badge>
               )}
-              {statusConexao === "CONNECTING" && (
+              {statusConexao === "CONNECTING" && qrCodeBase64 && (
                 <Badge variant="warning" className="flex items-center gap-1">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Aguardando Leitura
+                </Badge>
+              )}
+              {statusConexao === "CONNECTING" && !qrCodeBase64 && (
+                <Badge variant="warning" className="flex items-center gap-1 bg-amber-500/10 border-amber-500/30 text-amber-300">
+                  <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                  Reconectando Sessão...
                 </Badge>
               )}
               {statusConexao === "DISCONNECTED" && (
@@ -452,7 +458,7 @@ export default function WhatsAppPage() {
                   </div>
                   <h5 className="text-sm font-black text-emerald-400">WhatsApp Conectado com Sucesso!</h5>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    Seu robô está respondendo aos clientes automaticamente no número pareado.
+                    Seu robô está respondendo aos clientes automaticamente no número pareado. Sessão salva com segurança no banco de dados.
                   </p>
                 </div>
               ) : qrCodeBase64 ? (
@@ -472,6 +478,18 @@ export default function WhatsAppPage() {
                     </p>
                     <p className="text-[10px] text-zinc-500 mt-1">
                       O código atualiza automaticamente se expirar.
+                    </p>
+                  </div>
+                </div>
+              ) : statusConexao === "CONNECTING" ? (
+                <div className="text-center p-6 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-bold text-zinc-200">Restabelecendo conexão...</h5>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Carregando credenciais salvas no banco de dados e conectando ao WhatsApp...
                     </p>
                   </div>
                 </div>

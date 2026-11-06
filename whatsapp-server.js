@@ -1,6 +1,13 @@
 const http = require("http");
 const makeWASocket = require("@whiskeysockets/baileys").default;
-const { DisconnectReason, useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const {
+  DisconnectReason,
+  useMultiFileAuthState,
+  BufferJSON,
+  initAuthCreds,
+  proto,
+} = require("@whiskeysockets/baileys");
+const { Pool } = require("pg");
 const QRCode = require("qrcode");
 const pino = require("pino");
 const path = require("path");
@@ -9,6 +16,124 @@ const fs = require("fs");
 const PORT = 3001;
 const authDir = path.join(__dirname, "auth_info_baileys");
 const dbPath = path.join(__dirname, "data_storage.json");
+
+// Conexão com o banco PostgreSQL persistente para evitar perda de pareamento no Render
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgresql://postgres.lsgewrzvdviqthzegowv:aEB4_2Fgg!k5EZC@aws-1-sa-east-1.pooler.supabase.com:6543/postgres";
+
+let pgPool = null;
+try {
+  pgPool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    max: 10,
+    idleTimeoutMillis: 30000,
+  });
+  pgPool.on("error", (err) => {
+    console.error(">>> [PostgreSQL] Erro inesperado no cliente de conexão:", err.message);
+  });
+  console.log(">>> [PostgreSQL] Pool de conexão inicializado para sessões WhatsApp.");
+} catch (e) {
+  console.error("Erro ao inicializar Pool PostgreSQL:", e.message);
+}
+
+// Adaptador de autenticação Baileys no PostgreSQL
+async function usePostgresAuthState() {
+  if (!pgPool) {
+    console.log("⚠️ [Auth] PostgreSQL indisponível. Usando auth_info_baileys local.");
+    return useMultiFileAuthState(authDir);
+  }
+
+  try {
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS zap_session (
+        id TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+  } catch (err) {
+    console.error("Erro ao verificar/criar tabela zap_session:", err.message);
+  }
+
+  const readData = async (id) => {
+    try {
+      const res = await pgPool.query("SELECT value FROM zap_session WHERE id = $1", [id]);
+      if (res.rows.length === 0) return null;
+      return JSON.parse(res.rows[0].value, BufferJSON.reviver);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const writeData = async (id, data) => {
+    try {
+      const value = JSON.stringify(data, BufferJSON.replacer);
+      await pgPool.query(
+        "INSERT INTO zap_session (id, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (id) DO UPDATE SET value = $2, updated_at = NOW()",
+        [id, value]
+      );
+    } catch (e) {
+      console.error(`❌ [PostgreSQL] Erro ao salvar ${id}:`, e.message);
+    }
+  };
+
+  const removeData = async (id) => {
+    try {
+      await pgPool.query("DELETE FROM zap_session WHERE id = $1", [id]);
+    } catch (e) {
+      console.error(`❌ [PostgreSQL] Erro ao remover ${id}:`, e.message);
+    }
+  };
+
+  const credsData = (await readData("creds")) || initAuthCreds();
+
+  const state = {
+    creds: credsData,
+    keys: {
+      get: async (type, ids) => {
+        const data = {};
+        await Promise.all(
+          ids.map(async (id) => {
+            let value = await readData(`${type}-${id}`);
+            if (type === "app-state-sync-key" && value) {
+              value = proto.Message.AppStateSyncKeyData.fromObject(value);
+            }
+            data[id] = value;
+          })
+        );
+        return data;
+      },
+      set: async (data) => {
+        const tasks = [];
+        for (const category in data) {
+          for (const id in data[category]) {
+            const value = data[category][id];
+            tasks.push(
+              value ? writeData(`${category}-${id}`, value) : removeData(`${category}-${id}`)
+            );
+          }
+        }
+        await Promise.all(tasks);
+      },
+    },
+  };
+
+  const saveCreds = () => writeData("creds", state.creds);
+  console.log("✅ [PostgreSQL] Sessão do WhatsApp vinculada com persistência no banco de dados!");
+  return { state, saveCreds };
+}
+
+async function clearPostgresSession() {
+  if (!pgPool) return;
+  try {
+    await pgPool.query("DELETE FROM zap_session");
+    console.log("🗑️ [PostgreSQL] Sessão do WhatsApp apagada do banco.");
+  } catch (e) {
+    console.error("❌ Erro ao apagar sessão no PostgreSQL:", e.message);
+  }
+}
 
 let sock = null;
 let qrCodeBase64 = null;
@@ -73,7 +198,7 @@ function buscarClientePorTelefone(telefoneLimpo) {
   });
 }
 
-// Buscar agendamento ativo (CONFIRMADO) para o cliente
+// Buscar agendamento ativo (CONFIRMADO ou AGUARDANDO_SINAL) para o cliente
 function buscarAgendamentoAtivo(telefoneLimpo) {
   const db = lerBancoCentral();
   const tel = telefoneLimpo.replace(/\D/g, "");
@@ -81,12 +206,23 @@ function buscarAgendamentoAtivo(telefoneLimpo) {
   const hojeStr = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
 
   return db.agendamentos?.find((ag) => {
-    if (ag.status !== "CONFIRMADO") return false;
-    const agTel = ag.cliente_telefone.replace(/\D/g, "");
+    if (ag.status !== "CONFIRMADO" && ag.status !== "AGUARDANDO_SINAL") return false;
+    const agTel = (ag.cliente_telefone || "").replace(/\D/g, "");
     const mesmoTel = agTel === tel || agTel === tel.slice(2) || `55${agTel}` === tel;
     if (!mesmoTel) return false;
     const agData = ag.horario_inicio.split("T")[0];
     return agData >= hojeStr;
+  });
+}
+
+// Buscar agendamento que esteja aguardando comprovante de sinal
+function buscarAgendamentoAguardandoSinal(telefoneLimpo) {
+  const db = lerBancoCentral();
+  const tel = telefoneLimpo.replace(/\D/g, "");
+  return db.agendamentos?.find((ag) => {
+    if (ag.status !== "AGUARDANDO_SINAL") return false;
+    const agTel = (ag.cliente_telefone || "").replace(/\D/g, "");
+    return agTel === tel || agTel === tel.slice(2) || `55${agTel}` === tel;
   });
 }
 
@@ -190,6 +326,40 @@ async function cancelarAgendamentoNoPainel(id) {
   }
 }
 
+// Aprovar comprovante de sinal e confirmar agendamento no painel
+async function aprovarComprovanteCliente(telefoneLimpo) {
+  try {
+    const appUrl = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
+    const res = await fetch(`${appUrl}/api/agendamentos`);
+    if (res.ok) {
+      const ags = await res.json();
+      const tel = String(telefoneLimpo || "").replace(/\D/g, "");
+      const pendente = (ags || []).find((a) => {
+        if (a.status !== "AGUARDANDO_SINAL") return false;
+        const aTel = String(a.cliente_telefone || "").replace(/\D/g, "");
+        return aTel === tel || aTel === tel.slice(2) || `55${aTel}` === tel;
+      });
+      if (pendente) {
+        await fetch(`${appUrl}/api/agendamentos`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: pendente.id,
+            status: "CONFIRMADO",
+            comprovante_recebido: true,
+            forma_pagamento: "PIX",
+          }),
+        });
+        console.log(`>>> [Comprovante] Agendamento ${pendente.id} aprovado com sucesso via WhatsApp!`);
+        return pendente;
+      }
+    }
+  } catch (e) {
+    console.error("Erro ao aprovar comprovante via API:", e.message);
+  }
+  return null;
+}
+
 // Envio com COMPORTAMENTO HUMANO ANTI-BAN
 async function enviarMensagemHumana(remoteJid, texto) {
   if (!sock) return;
@@ -265,8 +435,8 @@ async function resolverRemoteJid(telefone) {
 // =========================================================================
 // MOTOR CONVERSACIONAL INTELIGENTE COM CAPTURA AUTOMÁTICA DE NOME
 // =========================================================================
-async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realPhone) {
-  const textoLimpo = textoUsuario.trim().toLowerCase();
+async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realPhone, ehMidia = false) {
+  const textoLimpo = (textoUsuario || "").trim().toLowerCase();
   let session = userSessions.get(remoteJid) || { step: "INICIAL" };
   let resposta = "";
 
@@ -281,6 +451,40 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   // 2. Captura direta do nome do perfil do WhatsApp (sempre atualizado pelo Zap do cliente)
   const pushNameLimpo = (pushNameRaw || "").replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, "").trim();
   const nomeDetectado = pushNameLimpo || "Cliente";
+
+  // 3. Verificação de envio de comprovante PIX
+  const ehComprovante =
+    ehMidia ||
+    textoLimpo.includes("comprovante") ||
+    textoLimpo.includes("pago") ||
+    textoLimpo.includes("pagamento") ||
+    textoLimpo.includes("pix") ||
+    textoLimpo.includes("enviei") ||
+    textoLimpo.includes("transferi") ||
+    textoLimpo.includes("mandei");
+
+  if (session.step === "AGUARDANDO_COMPROVANTE" || ehComprovante) {
+    const agAprovado = await aprovarComprovanteCliente(telefoneFinal);
+    const agendamentoAlvo = agAprovado || buscarAgendamentoAguardandoSinal(telefoneFinal);
+
+    if (agendamentoAlvo) {
+      session = { step: "INICIAL" };
+      userSessions.set(remoteJid, session);
+      return (
+        `📸 *Comprovante do PIX recebido com sucesso!* ✨\n\n` +
+        `Olá, *${nomeDetectado}*! Identificamos o seu comprovante do sinal e o seu agendamento para *${agendamentoAlvo.servico_titulo || "o procedimento"}* está *100% CONFIRMADO* na agenda do Studio Malu Alves Beauty! 🌸\n\n` +
+        `📍 *Local:* Studio Malu Alves Beauty\n` +
+        `Te enviaremos uma mensagem de lembrete antes do horário. Agradecemos a preferência e esperamos por você! ✨`
+      );
+    } else if (session.step === "AGUARDANDO_COMPROVANTE") {
+      session = { step: "INICIAL" };
+      userSessions.set(remoteJid, session);
+      return (
+        `📸 *Comprovante recebido com sucesso!* ✨\n\n` +
+        `Nossa equipe já foi notificada no painel administrativo e seu horário está garantido! Qualquer dúvida, estamos à disposição. 💖`
+      );
+    }
+  }
 
   // =========================================================================
   // ETAPA 1: MENU PRINCIPAL INTELIGENTE
@@ -460,7 +664,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   }
 
   // =========================================================================
-  // ETAPA 4: ESCOLHENDO HORÁRIO ➔ CONFIRMAÇÃO DIRETA (SEM PEDIR NOME!)
+  // ETAPA 4: ESCOLHENDO HORÁRIO ➔ CONFIRMAÇÃO DIRETA (COM SINAL SE ATIVADO)
   // =========================================================================
   else if (session.step === "ESCOLHENDO_HORARIO") {
     const idx = letras.indexOf(textoLimpo);
@@ -472,6 +676,19 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       const dia = session.diaEscolhido ? session.diaEscolhido.isoData : new Date().toISOString().split("T")[0];
       const dataHoraInicio = `${dia}T${horarioEscolhido}:00`;
 
+      const db = lerBancoCentral();
+      const cfg = db.config || {};
+      const exigeSinal = cfg.exigir_sinal ?? true;
+      let valorSinal = 0;
+      if (exigeSinal) {
+        if (cfg.tipo_sinal === "FIXO") {
+          valorSinal = cfg.sinal_valor_fixo ?? 20;
+        } else {
+          const pct = cfg.sinal_porcentagem ?? 30;
+          valorSinal = Math.round((srv.preco * pct) / 100);
+        }
+      }
+
       // Sincronizar em tempo real com o Painel Admin do Dono!
       salvarAgendamentoNoPainel({
         cliente_nome: nomeFinal,
@@ -479,21 +696,49 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
         servico: srv,
         horario_inicio: dataHoraInicio,
         origem: "WHATSAPP",
+        status: exigeSinal ? "AGUARDANDO_SINAL" : "CONFIRMADO",
+        valor_sinal: exigeSinal ? valorSinal : undefined,
       });
 
       const dataFormatada = dia.split("-").reverse().slice(0, 2).join("/");
 
-      resposta =
-        `🎉 *AGENDAMENTO CONFIRMADO!* 🎉\n\n` +
-        `👤 *Cliente:* ${nomeFinal}\n` +
-        `✨ *Procedimento:* ${srv.titulo}\n` +
-        `📅 *Data:* ${dataFormatada} às *${horarioEscolhido}*\n` +
-        `💵 *Valor:* ${formatarMoeda(srv.preco)}\n` +
-        `📍 *Local:* Studio Malu Alves Beauty\n\n` +
-        `✅ _Seu horário já foi reservado na agenda da designer! Enviaremos uma mensagem de lembrete 2h antes._\n\n` +
-        `Aguardamos você com muito carinho! ✨`;
-
-      session = { step: "INICIAL" };
+      if (exigeSinal) {
+        resposta =
+          `✨ *PRÉ-RESERVA REALIZADA!* ✨\n\n` +
+          `👤 *Cliente:* ${nomeFinal}\n` +
+          `✨ *Procedimento:* ${srv.titulo}\n` +
+          `📅 *Data:* ${dataFormatada} às *${horarioEscolhido}*\n` +
+          `💵 *Valor Total:* ${formatarMoeda(srv.preco)}\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `🔒 *CONFIRMAÇÃO DO HORÁRIO (SINAL ANTECIPADO)*\n` +
+          `Para confirmar sua vaga exclusiva na agenda e evitar cancelamentos, solicitamos um adiantamento de segurança:\n\n` +
+          `💰 *Valor do Sinal:* *${formatarMoeda(valorSinal)}*\n` +
+          `_(O restante de ${formatarMoeda(srv.preco - valorSinal)} será pago no dia do atendimento)_\n\n` +
+          `🔑 *CHAVE PIX (Celular):*\n` +
+          `\`${cfg.chave_pix || "82981430673"}\`\n` +
+          `*Titular:* ${cfg.titular_pix || "Luisa Alves dos Santos"}\n\n` +
+          `⏳ *Tempo limite:* Seu horário fica pré-reservado por *${cfg.tempo_limite_sinal_minutos || 30} minutos*.\n` +
+          `Por favor, responda a esta mensagem enviando a *foto ou comprovante* do PIX para confirmarmos seu horário! ✨\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        session = {
+          step: "AGUARDANDO_COMPROVANTE",
+          servico: srv,
+          valorSinal,
+          nomeCliente: nomeFinal,
+          horarioEscolhido,
+        };
+      } else {
+        resposta =
+          `🎉 *AGENDAMENTO CONFIRMADO!* 🎉\n\n` +
+          `👤 *Cliente:* ${nomeFinal}\n` +
+          `✨ *Procedimento:* ${srv.titulo}\n` +
+          `📅 *Data:* ${dataFormatada} às *${horarioEscolhido}*\n` +
+          `💵 *Valor:* ${formatarMoeda(srv.preco)}\n` +
+          `📍 *Local:* Studio Malu Alves Beauty\n\n` +
+          `✅ _Seu horário já foi reservado na agenda da designer! Enviaremos uma mensagem de lembrete 2h antes._\n\n` +
+          `Aguardamos você com muito carinho! ✨`;
+        session = { step: "INICIAL" };
+      }
     } else {
       resposta = `Letra inválida. Por favor, digite uma das letras listadas acima (ex: A, B, C...):`;
     }
@@ -512,11 +757,7 @@ async function startWhatsApp() {
   qrCodeBase64 = null;
 
   try {
-    if (!fs.existsSync(authDir)) {
-      fs.mkdirSync(authDir, { recursive: true });
-    }
-
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { state, saveCreds } = await usePostgresAuthState();
     const logger = pino({ level: "silent" });
 
     sock = makeWASocket({
@@ -535,7 +776,7 @@ async function startWhatsApp() {
         try {
           qrCodeBase64 = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
           status = "CONNECTING";
-          console.log(">>> [WhatsApp] QR Code real gerado.");
+          console.log(">>> [WhatsApp] QR Code real gerado para pareamento.");
         } catch (err) {
           console.error("Erro no QR:", err);
         }
@@ -550,19 +791,21 @@ async function startWhatsApp() {
         qrCodeBase64 = null;
         connectedPhone = null;
 
-        // Se for 401 (loggedOut) ou credencial corrompida, limpa auth_info_baileys para permitir gerar novo QR Code
+        // Se for 401 (loggedOut) ou desconexão manual pelo aparelho, limpa sessão no banco para permitir novo QR Code
         if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-          console.log(">>> [WhatsApp] Sessão expirada/desconectada no celular. Limpando credenciais antigas para novo QR Code...");
+          console.log(">>> [WhatsApp] Sessão desconectada no celular. Limpando credenciais antigas do PostgreSQL...");
+          await clearPostgresSession();
           if (fs.existsSync(authDir)) {
             fs.rmSync(authDir, { recursive: true, force: true });
           }
         }
 
         if (shouldReconnect) {
+          console.log(">>> [WhatsApp] Reconectando automaticamente em 3 segundos com credenciais salvas...");
           setTimeout(startWhatsApp, 3000);
         }
       } else if (connection === "open") {
-        console.log(">>> [WhatsApp] Conectado e Robô pronto com Captura Automática de Nome e Reconhecimento!");
+        console.log(">>> [WhatsApp] Conectado com sucesso com sessão persistida no PostgreSQL!");
         status = "CONNECTED";
         qrCodeBase64 = null;
         connectedPhone = sock?.user?.id?.split(":")[0] || "Conectado";
@@ -594,9 +837,12 @@ async function startWhatsApp() {
         const texto = (
           msg.message?.conversation ||
           msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption ||
+          msg.message?.documentMessage?.caption ||
           ""
         ).trim();
 
+        const ehMidia = Boolean(msg.message?.imageMessage || msg.message?.documentMessage);
         const pushName = msg.pushName || "";
         const realPhone = msg.key?.participantPn || msg.key?.senderPn || "";
 
@@ -610,10 +856,10 @@ async function startWhatsApp() {
           }
         }
 
-        if (!texto) continue;
+        if (!texto && !ehMidia) continue;
 
         try {
-          const resposta = await processarMensagemRobo(remoteJid, texto, pushName, realPhone);
+          const resposta = await processarMensagemRobo(remoteJid, texto, pushName, realPhone, ehMidia);
           if (resposta && sock) {
             await enviarMensagemHumana(remoteJid, resposta);
           }
@@ -631,7 +877,7 @@ async function startWhatsApp() {
 async function disconnectWhatsApp() {
   try {
     if (sock) {
-      await sock.logout();
+      await sock.logout().catch(() => {});
       sock = null;
     }
     status = "DISCONNECTED";
@@ -640,10 +886,11 @@ async function disconnectWhatsApp() {
     userSessions.clear();
     phoneToJidMap.clear();
     processedMessageIds.clear();
+    await clearPostgresSession();
     if (fs.existsSync(authDir)) {
       fs.rmSync(authDir, { recursive: true, force: true });
     }
-    console.log(">>> [WhatsApp] Desconectado.");
+    console.log(">>> [WhatsApp] Desconectado e banco limpo.");
   } catch (e) {
     console.error("Erro ao desconectar:", e);
   }
@@ -749,6 +996,53 @@ async function notificarConfirmacaoWeb(telefone, nomeCliente, servicoTitulo, dat
   return true;
 }
 
+// 5. Mensagem de Solicitação de Sinal Antecipado via PIX
+async function notificarSolicitacaoSinalWeb(dados) {
+  const { telefone, nome, servicoTitulo, dataHora, valor, valorSinal, chavePix, titularPix, tempoLimiteMinutos } = dados;
+  const targetJid = await resolverRemoteJid(telefone);
+  if (!sock || !targetJid) {
+    console.error(`>>> [WhatsApp] Não foi possível resolver targetJid para envio de sinal: ${telefone}`);
+    return false;
+  }
+
+  const horaStr = dataHora ? dataHora.split("T")[1]?.slice(0, 5) : "";
+  const dataPart = dataHora ? dataHora.split("T")[0] : "";
+  const dataFormatada = dataPart ? dataPart.split("-").reverse().slice(0, 2).join("/") : "hoje";
+
+  const valorTotalNum = Number(valor) || 30;
+  const valorSinalNum = Number(valorSinal) || Math.round(valorTotalNum * 0.3);
+  const restanteNum = Math.max(valorTotalNum - valorSinalNum, 0);
+
+  const mensagem =
+    `✨ *PRÉ-RESERVA REALIZADA COM SUCESSO!* ✨\n\n` +
+    `Olá, *${nome || "Cliente"}*! Recebemos sua solicitação de agendamento pelo site do Studio Malu Alves Beauty.\n\n` +
+    `• *Procedimento:* ${servicoTitulo || "Design de Sobrancelhas"}\n` +
+    `• *Data:* ${dataFormatada} às *${horaStr}*\n` +
+    `• *Valor Total:* ${formatarMoeda(valorTotalNum)}\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🔒 *CONFIRMAÇÃO DO AGENDAMENTO (SINAL ANTECIPADO)*\n` +
+    `Para garantir com exclusividade a sua vaga na agenda da designer e evitar cancelamentos, solicitamos um adiantamento de segurança:\n\n` +
+    `💰 *Valor do Sinal:* *${formatarMoeda(valorSinalNum)}*\n` +
+    `_(O restante de ${formatarMoeda(restanteNum)} será pago no dia do seu atendimento)_\n\n` +
+    `🔑 *CHAVE PIX (Celular):*\n` +
+    `\`${chavePix || "82981430673"}\`\n` +
+    `*Titular:* ${titularPix || "Luisa Alves dos Santos"}\n\n` +
+    `⏳ *Tempo limite:* Seu horário fica reservado por *${tempoLimiteMinutos || 30} minutos*.\n` +
+    `Por favor, responda a esta mensagem enviando a *foto ou comprovante* do PIX para que o robô confirme seu horário automaticamente! ✨\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  console.log(`>>> [Sinal Web] Enviando solicitação de PIX para ${targetJid} (${nome})...`);
+  userSessions.set(targetJid, {
+    step: "AGUARDANDO_COMPROVANTE",
+    servico: { titulo: servicoTitulo, preco: valorTotalNum },
+    valorSinal: valorSinalNum,
+    clienteNome: nome,
+    horarioInicio: dataHora,
+  });
+  await enviarMensagemHumana(targetJid, mensagem);
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -785,9 +1079,12 @@ const server = http.createServer(async (req, res) => {
     req.on("data", (chunk) => (body += chunk));
     req.on("end", async () => {
       try {
-        const { tipo, telefone, nome, servicoTitulo, dataHora, valor, totalVisitas } = JSON.parse(body);
+        const dados = JSON.parse(body);
+        const { tipo, telefone, nome, servicoTitulo, dataHora, valor, totalVisitas } = dados;
 
-        if (tipo === "CONFIRMACAO_WEB") {
+        if (tipo === "SOLICITAR_SINAL_WEB") {
+          await notificarSolicitacaoSinalWeb(dados);
+        } else if (tipo === "CONFIRMACAO_WEB") {
           await notificarConfirmacaoWeb(telefone, nome, servicoTitulo, dataHora, valor);
         } else if (tipo === "CONCLUIDO") {
           await notificarConclusaoAdmin(telefone, nome, totalVisitas);
