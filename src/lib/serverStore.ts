@@ -164,7 +164,55 @@ export const ServerStore = {
     return false;
   },
 
+  executarAutoExpiracaoSinal(dbParam?: DBData): boolean {
+    const dados = dbParam || readDB();
+    const autoLiberar = dados.config.auto_liberar_sinal_expirado ?? true;
+    if (!autoLiberar) return false;
+
+    const toleranciaMin = dados.config.tolerancia_auto_liberacao_minutos ?? 15;
+    const agoraMs = Date.now();
+    let alterado = false;
+
+    dados.agendamentos.forEach((ag) => {
+      if (ag.status === "AGUARDANDO_SINAL" && !ag.comprovante_recebido && ag.tempo_expiracao_sinal) {
+        const tempoExpMs = new Date(ag.tempo_expiracao_sinal).getTime();
+        const limiteComTolerancia = tempoExpMs + toleranciaMin * 60 * 1000;
+
+        if (agoraMs > limiteComTolerancia) {
+          ag.status = "CANCELADO";
+          ag.observacoes = (ag.observacoes ? ag.observacoes + " • " : "") + "Cancelado automaticamente (sinal PIX expirado)";
+          alterado = true;
+
+          // Disparar cancelamento e notificação educada no WhatsApp
+          const whatsappUrl =
+            process.env.WHATSAPP_SERVER_URL ||
+            process.env.NEXT_PUBLIC_WHATSAPP_SERVER_URL ||
+            "https://malu-alvesbeauty.onrender.com";
+
+          fetch(`${whatsappUrl}/cancel-notify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              telefone: ag.cliente_telefone,
+              nome: ag.cliente_nome,
+              dataHora: ag.horario_inicio,
+              motivo: "Prazo para envio do sinal PIX expirado",
+            }),
+          }).catch((e) => console.error("Erro ao notificar cancelamento por sinal expirado:", e));
+        }
+      }
+    });
+
+    if (alterado) {
+      writeDB(dados);
+      console.log(">>> [Auto-Expiração] Agendamento(s) com sinal expirado foram cancelados e vagas liberadas na agenda.");
+      return true;
+    }
+    return false;
+  },
+
   getAgendamentos(dataFiltro?: string): Agendamento[] {
+    this.executarAutoExpiracaoSinal();
     this.executarAutoLimpeza();
     const db = readDB();
     let lista = db.agendamentos;

@@ -321,6 +321,25 @@ export const DataStore = {
   async getAgendamentos(dataFiltro?: string): Promise<Agendamento[]> {
     if (typeof window !== "undefined") {
       try {
+        // Auto-expiração no cache local
+        const agoraMs = Date.now();
+        let alterouLocal = false;
+        const agsLocais = getLocal<Agendamento[]>(KEYS.AGENDAMENTOS, agendamentosIniciais);
+        agsLocais.forEach((ag) => {
+          if (ag.status === "AGUARDANDO_SINAL" && !ag.comprovante_recebido && ag.tempo_expiracao_sinal) {
+            const expMs = new Date(ag.tempo_expiracao_sinal).getTime();
+            const limite = expMs + 15 * 60 * 1000;
+            if (agoraMs > limite) {
+              ag.status = "CANCELADO";
+              ag.observacoes = (ag.observacoes ? ag.observacoes + " • " : "") + "Cancelado automaticamente (sinal PIX expirado)";
+              alterouLocal = true;
+            }
+          }
+        });
+        if (alterouLocal) {
+          setLocal(KEYS.AGENDAMENTOS, agsLocais);
+        }
+
         const url = dataFiltro ? `/api/agendamentos?data=${dataFiltro}` : `/api/agendamentos`;
         const res = await fetch(url, { cache: "no-store" });
         if (res.ok) {

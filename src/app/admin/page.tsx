@@ -855,6 +855,13 @@ export default function AgendaPage() {
             const horaInicio = ag.horario_inicio.split("T")[1]?.slice(0, 5) || "--:--";
             const horaFim = ag.horario_fim.split("T")[1]?.slice(0, 5) || "--:--";
 
+            // Status do sinal PIX e expiração inteligente com tolerância
+            const agoraMs = Date.now();
+            const expMs = ag.tempo_expiracao_sinal ? new Date(ag.tempo_expiracao_sinal).getTime() : 0;
+            const sinalExpirado = ag.status === "AGUARDANDO_SINAL" && expMs > 0 && agoraMs > expMs;
+            const minutosExpirados = sinalExpirado ? Math.max(1, Math.floor((agoraMs - expMs) / 60000)) : 0;
+            const minutosRestantes = !sinalExpirado && expMs > 0 ? Math.max(1, Math.ceil((expMs - agoraMs) / 60000)) : 0;
+
             // Buscar histórico do cliente para selo de fidelidade
             const telLimpo = ag.cliente_telefone.replace(/\D/g, "");
             const clienteCadastrado = clientes.find((c) => c.telefone.replace(/\D/g, "") === telLimpo);
@@ -921,10 +928,18 @@ export default function AgendaPage() {
                           >
                             📸 Comprovante Enviado
                           </Badge>
+                        ) : sinalExpirado ? (
+                          <Badge
+                            variant="danger"
+                            className="text-[10px] flex items-center gap-1 font-bold animate-pulse bg-red-500/20 text-red-300 border-red-500/40"
+                          >
+                            <AlertTriangle className="w-2.5 h-2.5 text-red-400" />
+                            ⏰ Prazo Expirado ({minutosExpirados}m atrás • Tolerância ativa)
+                          </Badge>
                         ) : (
                           <Badge variant="warning" className="text-[10px] flex items-center gap-1 font-bold">
-                            <Clock className="w-2.5 h-2.5" />
-                            Aguardando Sinal ({formatarMoeda(ag.valor_sinal || 0)})
+                            <Clock className="w-2.5 h-2.5 text-amber-400" />
+                            Aguardando Sinal ({formatarMoeda(ag.valor_sinal || 0)}) • Restam {minutosRestantes}m
                           </Badge>
                         ))}
                       {ag.status === "CONFIRMADO" && <Badge variant="warning">Aguardando Atendimento</Badge>}
@@ -998,7 +1013,7 @@ export default function AgendaPage() {
                       </Button>
 
                       <Button
-                        variant="danger"
+                        variant={sinalExpirado ? "danger" : "secondary"}
                         size="sm"
                         onClick={() =>
                           setConfirmarStatusModal({
@@ -1007,9 +1022,14 @@ export default function AgendaPage() {
                             novoStatus: "CANCELADO",
                           })
                         }
-                        className="text-xs font-bold"
+                        className={cn(
+                          "text-xs font-bold",
+                          sinalExpirado
+                            ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/25 border-red-500 animate-pulse"
+                            : "text-zinc-300 hover:text-white"
+                        )}
                       >
-                        Liberar Vaga
+                        {sinalExpirado ? "Liberar Vaga Agora" : "Liberar Vaga"}
                       </Button>
                     </>
                   )}

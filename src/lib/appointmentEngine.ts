@@ -56,8 +56,19 @@ export function calcularSlotsDisponiveis({
   }
 
   // 3. Filtrar agendamentos ativos para o dia
+  const agoraMs = Date.now();
   const agendamentosDoDia = agendamentosExistentes.filter((ag) => {
     if (ag.status === "CANCELADO") return false;
+
+    // Se o agendamento estiver aguardando sinal e já passou da tolerância de segurança (15 min extras), libera a vaga
+    if (ag.status === "AGUARDANDO_SINAL" && !ag.comprovante_recebido && ag.tempo_expiracao_sinal) {
+      const expMs = new Date(ag.tempo_expiracao_sinal).getTime();
+      const limiteComTolerancia = expMs + 15 * 60 * 1000;
+      if (agoraMs > limiteComTolerancia) {
+        return false; // Vaga livre para novos agendamentos!
+      }
+    }
+
     const agData = ag.horario_inicio.split("T")[0];
     return agData === data;
   });

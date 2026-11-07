@@ -310,7 +310,7 @@ export default function ConfigPage() {
               {/* Tolerância de Tempo para Envio do Comprovante */}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-zinc-300 block mb-1.5">
-                  Tolerância para Envio do Comprovante (Tempo de Reserva)
+                  Prazo Informado ao Cliente no WhatsApp
                 </label>
                 <select
                   value={config.tempo_limite_sinal_minutos ?? 30}
@@ -329,8 +329,62 @@ export default function ConfigPage() {
                   <option value="120">2 horas</option>
                 </select>
                 <p className="text-[11px] text-zinc-400 mt-1">
-                  Se a cliente não enviar o comprovante dentro deste prazo, o robô pode liberar a vaga na agenda para outras clientes.
+                  Tempo que o robô informa no WhatsApp para a cliente realizar o PIX do sinal.
                 </p>
+              </div>
+
+              {/* Auto-Liberação Inteligente com Tolerância de Segurança */}
+              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-bold text-zinc-200 block">
+                      Auto-Liberação de Vagas Expiradas
+                    </label>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Cancela automaticamente e reabre o horário no site se o cliente não enviar o comprovante após o prazo.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.auto_liberar_sinal_expirado ?? true}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          auto_liberar_sinal_expirado: e.target.checked,
+                        })
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
+
+                {(config.auto_liberar_sinal_expirado ?? true) && (
+                  <div className="pt-2 border-t border-zinc-800/60">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-amber-400 block mb-1">
+                      Tolerância de Segurança Extra (Evita cortar clientes com PIX lento)
+                    </label>
+                    <select
+                      value={config.tolerancia_auto_liberacao_minutos ?? 15}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          tolerancia_auto_liberacao_minutos: parseInt(e.target.value, 10) || 15,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-semibold"
+                    >
+                      <option value="5">+5 minutos de tolerância extra</option>
+                      <option value="10">+10 minutos de tolerância extra</option>
+                      <option value="15">+15 minutos de tolerância extra (Recomendado - Total: {(config.tempo_limite_sinal_minutos ?? 30) + 15} min)</option>
+                      <option value="30">+30 minutos de tolerância extra</option>
+                    </select>
+                    <p className="text-[10px] text-zinc-400 mt-1">
+                      Aos {config.tempo_limite_sinal_minutos ?? 30} min o card fica vermelho com aviso de prazo expirado. Aos {(config.tempo_limite_sinal_minutos ?? 30) + (config.tolerancia_auto_liberacao_minutos ?? 15)} min a vaga é liberada automaticamente.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Preview da Mensagem enviada pelo Robô */}
