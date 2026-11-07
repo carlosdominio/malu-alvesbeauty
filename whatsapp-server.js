@@ -188,7 +188,7 @@ async function clearPostgresSession() {
 
 let sock = null;
 let qrCodeBase64 = null;
-let status = "DISCONNECTED"; // "DISCONNECTED" | "CONNECTING" | "CONNECTED"
+let status = "DISCONNECTED"; // "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "STANDBY"
 let connectedPhone = null;
 let isStarting = false;
 let reconnectTimeout = null;
@@ -198,6 +198,65 @@ let lastDisconnectInfo = {
   time: null,
   disconnectCount: 0,
 };
+
+// Identificador único da instância para eleição de líder e prevenção de erro 440
+const INSTANCE_ID = `inst-${process.pid}-${Math.random().toString(36).substring(2, 7)}`;
+let isLeader = false;
+let leaderHeartbeatInterval = null;
+
+async function checkAndAcquireLeader() {
+  if (!pgPool) return true;
+  try {
+    const res = await pgPool.query("SELECT value FROM zap_session WHERE id = 'bot_active_leader'");
+    const now = Date.now();
+    if (res.rows.length > 0) {
+      try {
+        const leader = JSON.parse(res.rows[0].value);
+        if (leader.instanceId === INSTANCE_ID) {
+          isLeader = true;
+          return true;
+        }
+        if (now - (leader.updatedAt || 0) < 15000) {
+          isLeader = false;
+          return false;
+        }
+      } catch (_) {}
+    }
+    const payload = JSON.stringify({ instanceId: INSTANCE_ID, updatedAt: now });
+    await pgPool.query(
+      "INSERT INTO zap_session (id, value, updated_at) VALUES ('bot_active_leader', $1, NOW()) ON CONFLICT (id) DO UPDATE SET value = $1, updated_at = NOW()",
+      [payload]
+    );
+    isLeader = true;
+    startLeaderHeartbeat();
+    return true;
+  } catch (err) {
+    console.error("Erro ao verificar liderança de instância:", err.message);
+    return true;
+  }
+}
+
+function startLeaderHeartbeat() {
+  if (leaderHeartbeatInterval) clearInterval(leaderHeartbeatInterval);
+  leaderHeartbeatInterval = setInterval(async () => {
+    if (!isLeader || !pgPool) return;
+    try {
+      const payload = JSON.stringify({ instanceId: INSTANCE_ID, updatedAt: Date.now() });
+      await pgPool.query(
+        "UPDATE zap_session SET value = $1, updated_at = NOW() WHERE id = 'bot_active_leader'",
+        [payload]
+      );
+    } catch (_) {}
+  }, 5000);
+}
+
+function releaseLeader() {
+  isLeader = false;
+  if (leaderHeartbeatInterval) {
+    clearInterval(leaderHeartbeatInterval);
+    leaderHeartbeatInterval = null;
+  }
+}
 
 // Controle de sessões dos clientes, mapa de JIDs e deduplicação de mensagens
 const userSessions = new Map();
@@ -1140,6 +1199,21 @@ async function startWhatsApp() {
   }
 
   isStarting = true;
+
+  // Proteção de líder único distribuído: impede que duas instâncias concorram pelo WhatsApp (Erro 440)
+  const canBeLeader = await checkAndAcquireLeader();
+  if (!canBeLeader) {
+    console.log(`⚠️ [WhatsApp][${INSTANCE_ID}] Outra instância já está ativa como líder conectada ao WhatsApp. Entrando em STANDBY para evitar conflito 440...`);
+    status = "STANDBY";
+    isStarting = false;
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    reconnectTimeout = setTimeout(() => {
+      reconnectTimeout = null;
+      startWhatsApp();
+    }, 10000);
+    return;
+  }
+
   status = "CONNECTING";
   qrCodeBase64 = null;
 
@@ -1222,9 +1296,14 @@ async function startWhatsApp() {
           console.warn(">>> [WhatsApp] DisconnectReason.loggedOut recebido do servidor WhatsApp.");
         }
 
+        if (statusCode === 440) {
+          console.warn(`>>> [WhatsApp][${INSTANCE_ID}] Conflito 440 detectado. Liberando liderança e aguardando...`);
+          releaseLeader();
+        }
+
         if (shouldReconnect) {
-          const delay = statusCode === DisconnectReason.restartRequired ? 1000 : (statusCode === 440 ? 10000 : 3500);
-          console.log(`>>> [WhatsApp] Reconectando automaticamente em ${delay}ms com credenciais salvas...`);
+          const delay = statusCode === DisconnectReason.restartRequired ? 1000 : (statusCode === 440 ? 12000 : 3500);
+          console.log(`>>> [WhatsApp][${INSTANCE_ID}] Reconectando automaticamente em ${delay}ms com credenciais salvas...`);
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
             reconnectTimeout = null;
@@ -1232,7 +1311,7 @@ async function startWhatsApp() {
           }, delay);
         }
       } else if (connection === "open") {
-        console.log(">>> [WhatsApp] Conectado com sucesso com sessão persistida no PostgreSQL!");
+        console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conectado com sucesso com sessão persistida no PostgreSQL!`);
         status = "CONNECTED";
         qrCodeBase64 = null;
         connectedPhone = sock?.user?.id?.split(":")[0] || "Conectado";
@@ -1309,6 +1388,7 @@ async function startWhatsApp() {
 }
 
 async function disconnectWhatsApp() {
+  releaseLeader();
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
@@ -1601,6 +1681,8 @@ const server = http.createServer(async (req, res) => {
         status,
         qrCodeBase64,
         connectedPhone,
+        instanceId: INSTANCE_ID,
+        isLeader,
         lastDisconnectInfo,
         uptime: Math.round(process.uptime()),
       })
