@@ -1291,9 +1291,16 @@ async function startWhatsApp() {
           sock = null;
         }
 
-        // Se o celular fez logout explícito
+        // Se o WhatsApp revogou a sessão (logout explícito ou token invalidado)
         if (statusCode === DisconnectReason.loggedOut) {
-          console.warn(">>> [WhatsApp] DisconnectReason.loggedOut recebido do servidor WhatsApp.");
+          console.warn(">>> [WhatsApp] DisconnectReason.loggedOut (401) recebido. Limpando credenciais revogadas para permitir novo pareamento via QR Code...");
+          sessionCache.clear();
+          await clearPostgresSession();
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            startWhatsApp();
+          }, 3000);
         }
 
         if (statusCode === 440) {
@@ -1340,15 +1347,24 @@ async function startWhatsApp() {
         }
 
         const remoteJid = msg.key.remoteJid;
+
+        // Desempacotar mensagens efêmeras, viewOnce ou anexos multimídia
+        const messageContent =
+          msg.message?.ephemeralMessage?.message ||
+          msg.message?.viewOnceMessage?.message ||
+          msg.message?.viewOnceMessageV2?.message ||
+          msg.message?.documentWithCaptionMessage?.message ||
+          msg.message;
+
         const texto = (
-          msg.message?.conversation ||
-          msg.message?.extendedTextMessage?.text ||
-          msg.message?.imageMessage?.caption ||
-          msg.message?.documentMessage?.caption ||
+          messageContent?.conversation ||
+          messageContent?.extendedTextMessage?.text ||
+          messageContent?.imageMessage?.caption ||
+          messageContent?.documentMessage?.caption ||
           ""
         ).trim();
 
-        const ehMidia = Boolean(msg.message?.imageMessage || msg.message?.documentMessage);
+        const ehMidia = Boolean(messageContent?.imageMessage || messageContent?.documentMessage);
         const pushName = msg.pushName || "";
         const realPhone = msg.key?.participantPn || msg.key?.senderPn || "";
 
@@ -1364,10 +1380,15 @@ async function startWhatsApp() {
 
         if (!texto && !ehMidia) continue;
 
+        console.log(`>>> [WhatsApp] Mensagem recebida de ${remoteJid} (${pushName || "Cliente"}): "${texto || "[Mídia/Comprovante]"}"`);
+
         try {
           const resposta = await processarMensagemRobo(remoteJid, texto, pushName, realPhone, ehMidia);
           if (resposta && sock) {
+            console.log(`>>> [WhatsApp] Enviando resposta automática para ${remoteJid}...`);
             await enviarMensagemHumana(remoteJid, resposta);
+          } else {
+            console.log(`>>> [WhatsApp] Nenhuma resposta retornada pelo robô para ${remoteJid}`);
           }
         } catch (err) {
           console.error("Erro ao processar mensagem do robô:", err);
@@ -1771,3 +1792,24 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`>>> Servidor WhatsApp nativo rodando na porta ${PORT}`);
   startWhatsApp();
 });
+
+// Desligamento gracioso para evitar conflitos de sessão (Erro 440) durante deploys no Render
+async function gracefulShutdown(signal) {
+  console.log(`>>> [GracefulShutdown] Sinal ${signal} recebido. Desconectando de forma limpa a instância ${INSTANCE_ID}...`);
+  if (leaderHeartbeatInterval) {
+    clearInterval(leaderHeartbeatInterval);
+    leaderHeartbeatInterval = null;
+  }
+  await releaseLeader();
+  if (sock) {
+    try {
+      sock.ev?.removeAllListeners();
+      sock.ws?.close();
+    } catch (_) {}
+    sock = null;
+  }
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

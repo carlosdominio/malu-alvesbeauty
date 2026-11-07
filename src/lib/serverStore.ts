@@ -40,11 +40,18 @@ function somarMinutosDataHora(dataHoraInicio: string, duracaoMinutos?: number): 
   return `${dataPart}T${String(fimH).padStart(2, "0")}:${String(fimM).padStart(2, "0")}:00`;
 }
 
+let memoryDB: DBData | null = null;
+
 function readDB(): DBData {
+  if (memoryDB) {
+    return memoryDB;
+  }
+
   try {
     if (fs.existsSync(DB_PATH)) {
       const content = fs.readFileSync(DB_PATH, "utf-8");
-      return JSON.parse(content);
+      memoryDB = JSON.parse(content);
+      return memoryDB!;
     }
   } catch (err) {
     console.error("Erro ao ler data_storage.json:", err);
@@ -59,15 +66,26 @@ function readDB(): DBData {
     bloqueios: [],
   };
 
+  memoryDB = initialDB;
   writeDB(initialDB);
   return initialDB;
 }
 
 function writeDB(data: DBData): void {
+  memoryDB = data;
+
+  // Na Vercel ou AWS Lambda o sistema de arquivos (/var/task) é estritamente somente leitura (EROFS)
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return;
+  }
+
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Erro ao salvar data_storage.json:", err);
+  } catch (err: unknown) {
+    const errorObj = err as { code?: string; message?: string };
+    if (errorObj?.code !== "EROFS") {
+      console.error("Erro ao salvar data_storage.json:", errorObj?.message || err);
+    }
   }
 }
 

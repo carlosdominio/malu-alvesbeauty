@@ -17,8 +17,6 @@ export async function GET() {
       const { data, error } = await supabase.from("barbearia_config").select("*").limit(1).single();
       if (!error && data) {
         const configCombinado = fromSupabaseConfigPayload(data, configServidor);
-        // Garante que o ServerStore (data_storage.json) também fica com a versão mais recente
-        ServerStore.updateConfig(configCombinado);
         return NextResponse.json(configCombinado);
       }
     }
