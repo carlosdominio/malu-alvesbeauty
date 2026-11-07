@@ -6,6 +6,7 @@ const {
   BufferJSON,
   initAuthCreds,
   proto,
+  Browsers,
 } = require("@whiskeysockets/baileys");
 const { Pool } = require("pg");
 const QRCode = require("qrcode");
@@ -38,7 +39,10 @@ try {
   console.error("Erro ao inicializar Pool PostgreSQL:", e.message);
 }
 
-// Adaptador de autenticação Baileys no PostgreSQL
+// Cache em memória para evitar gargalo de latência e timeouts em queries de chaves
+const sessionCache = new Map();
+
+// Adaptador de autenticação Baileys no PostgreSQL com Cache em RAM
 async function usePostgresAuthState() {
   if (!pgPool) {
     console.log("⚠️ [Auth] PostgreSQL indisponível. Usando auth_info_baileys local.");
@@ -58,16 +62,23 @@ async function usePostgresAuthState() {
   }
 
   const readData = async (id) => {
+    if (sessionCache.has(id)) {
+      return sessionCache.get(id);
+    }
     try {
       const res = await pgPool.query("SELECT value FROM zap_session WHERE id = $1", [id]);
       if (res.rows.length === 0) return null;
-      return JSON.parse(res.rows[0].value, BufferJSON.reviver);
+      const parsed = JSON.parse(res.rows[0].value, BufferJSON.reviver);
+      sessionCache.set(id, parsed);
+      return parsed;
     } catch (e) {
+      console.warn(`[Auth] Erro ao ler ${id} do PostgreSQL:`, e.message);
       return null;
     }
   };
 
   const writeData = async (id, data) => {
+    sessionCache.set(id, data);
     try {
       const value = JSON.stringify(data, BufferJSON.replacer);
       await pgPool.query(
@@ -80,6 +91,7 @@ async function usePostgresAuthState() {
   };
 
   const removeData = async (id) => {
+    sessionCache.delete(id);
     try {
       await pgPool.query("DELETE FROM zap_session WHERE id = $1", [id]);
     } catch (e) {
@@ -87,31 +99,69 @@ async function usePostgresAuthState() {
     }
   };
 
-  const credsData = (await readData("creds")) || initAuthCreds();
+  let credsData = sessionCache.get("creds") || (await readData("creds"));
+  if (!credsData) {
+    console.log("ℹ️ [Auth] Nenhuma credencial existente em zap_session. Inicializando novas credenciais.");
+    credsData = initAuthCreds();
+    sessionCache.set("creds", credsData);
+  }
 
   const state = {
     creds: credsData,
     keys: {
       get: async (type, ids) => {
         const data = {};
-        await Promise.all(
-          ids.map(async (id) => {
-            let value = await readData(`${type}-${id}`);
-            if (type === "app-state-sync-key" && value) {
-              value = proto.Message.AppStateSyncKeyData.fromObject(value);
+        const missing = [];
+        for (const id of ids) {
+          const fullKey = `${type}-${id}`;
+          if (sessionCache.has(fullKey)) {
+            data[id] = sessionCache.get(fullKey);
+          } else {
+            missing.push({ id, fullKey });
+          }
+        }
+
+        if (missing.length > 0) {
+          try {
+            const fullKeys = missing.map((m) => m.fullKey);
+            const res = await pgPool.query(
+              "SELECT id, value FROM zap_session WHERE id = ANY($1)",
+              [fullKeys]
+            );
+            const foundMap = new Map();
+            for (const row of res.rows) {
+              foundMap.set(row.id, JSON.parse(row.value, BufferJSON.reviver));
             }
-            data[id] = value;
-          })
-        );
+            for (const m of missing) {
+              let val = foundMap.get(m.fullKey) || null;
+              if (type === "app-state-sync-key" && val) {
+                val = proto.Message.AppStateSyncKeyData.fromObject(val);
+              }
+              sessionCache.set(m.fullKey, val);
+              data[m.id] = val;
+            }
+          } catch (err) {
+            console.error("Erro na busca em lote de chaves no PostgreSQL:", err.message);
+            for (const m of missing) {
+              let val = await readData(m.fullKey);
+              if (type === "app-state-sync-key" && val) {
+                val = proto.Message.AppStateSyncKeyData.fromObject(val);
+              }
+              data[m.id] = val;
+            }
+          }
+        }
         return data;
       },
       set: async (data) => {
         const tasks = [];
         for (const category in data) {
           for (const id in data[category]) {
+            const fullKey = `${category}-${id}`;
             const value = data[category][id];
+            sessionCache.set(fullKey, value);
             tasks.push(
-              value ? writeData(`${category}-${id}`, value) : removeData(`${category}-${id}`)
+              value ? writeData(fullKey, value) : removeData(fullKey)
             );
           }
         }
@@ -121,11 +171,12 @@ async function usePostgresAuthState() {
   };
 
   const saveCreds = () => writeData("creds", state.creds);
-  console.log("✅ [PostgreSQL] Sessão do WhatsApp vinculada com persistência no banco de dados!");
+  console.log("✅ [PostgreSQL] Sessão do WhatsApp vinculada com persistência e cache em memória!");
   return { state, saveCreds };
 }
 
 async function clearPostgresSession() {
+  sessionCache.clear();
   if (!pgPool) return;
   try {
     await pgPool.query("DELETE FROM zap_session");
@@ -139,6 +190,14 @@ let sock = null;
 let qrCodeBase64 = null;
 let status = "DISCONNECTED"; // "DISCONNECTED" | "CONNECTING" | "CONNECTED"
 let connectedPhone = null;
+let isStarting = false;
+let reconnectTimeout = null;
+let lastDisconnectInfo = {
+  statusCode: null,
+  error: null,
+  time: null,
+  disconnectCount: 0,
+};
 
 // Controle de sessões dos clientes, mapa de JIDs e deduplicação de mensagens
 const userSessions = new Map();
@@ -1076,12 +1135,26 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
 }
 
 async function startWhatsApp() {
-  if (status === "CONNECTED" || status === "CONNECTING") {
+  if (status === "CONNECTED" || status === "CONNECTING" || isStarting) {
     return;
   }
 
+  isStarting = true;
   status = "CONNECTING";
   qrCodeBase64 = null;
+
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+
+  if (sock) {
+    try {
+      sock.ev?.removeAllListeners();
+      sock.ws?.close();
+    } catch (_) {}
+    sock = null;
+  }
 
   try {
     const { state, saveCreds } = await usePostgresAuthState();
@@ -1091,7 +1164,16 @@ async function startWhatsApp() {
       auth: state,
       logger,
       printQRInTerminal: false,
-      browser: ["Studio Malu Alves Beauty", "Chrome", "1.0.0"],
+      browser: Browsers.ubuntu("Chrome"),
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 25000,
+      generateHighQualityLinkPreview: false,
+      getMessage: async () => ({
+        conversation: "ok",
+      }),
     });
 
     sock.ev.on("creds.update", saveCreds);
@@ -1111,25 +1193,43 @@ async function startWhatsApp() {
 
       if (connection === "close") {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const errorMsg = lastDisconnect?.error?.message || String(lastDisconnect?.error || "");
+
+        lastDisconnectInfo = {
+          statusCode: statusCode || null,
+          error: errorMsg,
+          time: new Date().toISOString(),
+          disconnectCount: (lastDisconnectInfo.disconnectCount || 0) + 1,
+        };
+
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-        console.log(`Conexão fechada. Status: ${statusCode}, Reconectar: ${shouldReconnect}`);
+        console.log(`Conexão fechada. Status: ${statusCode} (${errorMsg}), Reconectar: ${shouldReconnect}`);
         status = "DISCONNECTED";
         qrCodeBase64 = null;
         connectedPhone = null;
 
-        // Se for 401 (loggedOut) ou desconexão manual pelo aparelho, limpa sessão no banco para permitir novo QR Code
-        if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-          console.log(">>> [WhatsApp] Sessão desconectada no celular. Limpando credenciais antigas do PostgreSQL...");
-          await clearPostgresSession();
-          if (fs.existsSync(authDir)) {
-            fs.rmSync(authDir, { recursive: true, force: true });
-          }
+        if (sock) {
+          try {
+            sock.ev?.removeAllListeners();
+            sock.ws?.close();
+          } catch (_) {}
+          sock = null;
+        }
+
+        // Se o celular fez logout explícito
+        if (statusCode === DisconnectReason.loggedOut) {
+          console.warn(">>> [WhatsApp] DisconnectReason.loggedOut recebido do servidor WhatsApp.");
         }
 
         if (shouldReconnect) {
-          console.log(">>> [WhatsApp] Reconectando automaticamente em 3 segundos com credenciais salvas...");
-          setTimeout(startWhatsApp, 3000);
+          const delay = statusCode === DisconnectReason.restartRequired ? 1000 : (statusCode === 440 ? 10000 : 3500);
+          console.log(`>>> [WhatsApp] Reconectando automaticamente em ${delay}ms com credenciais salvas...`);
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            startWhatsApp();
+          }, delay);
         }
       } else if (connection === "open") {
         console.log(">>> [WhatsApp] Conectado com sucesso com sessão persistida no PostgreSQL!");
@@ -1198,13 +1298,26 @@ async function startWhatsApp() {
   } catch (error) {
     console.error("Erro ao iniciar Baileys:", error);
     status = "DISCONNECTED";
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    reconnectTimeout = setTimeout(() => {
+      reconnectTimeout = null;
+      startWhatsApp();
+    }, 5000);
+  } finally {
+    isStarting = false;
   }
 }
 
 async function disconnectWhatsApp() {
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
   try {
     if (sock) {
       await sock.logout().catch(() => {});
+      sock.ev?.removeAllListeners();
+      sock.ws?.close();
       sock = null;
     }
     status = "DISCONNECTED";
@@ -1483,7 +1596,15 @@ const server = http.createServer(async (req, res) => {
 
   if (req.url === "/status" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status, qrCodeBase64, connectedPhone }));
+    res.end(
+      JSON.stringify({
+        status,
+        qrCodeBase64,
+        connectedPhone,
+        lastDisconnectInfo,
+        uptime: Math.round(process.uptime()),
+      })
+    );
     return;
   }
 
