@@ -7,6 +7,7 @@ const {
   initAuthCreds,
   proto,
   Browsers,
+  fetchLatestBaileysVersion,
 } = require("@whiskeysockets/baileys");
 const { Pool } = require("pg");
 const QRCode = require("qrcode");
@@ -170,7 +171,14 @@ async function usePostgresAuthState() {
     },
   };
 
-  const saveCreds = () => writeData("creds", state.creds);
+  const saveCreds = async () => {
+    try {
+      await writeData("creds", state.creds);
+      console.log("💾 [PostgreSQL] Credenciais da sessão (creds) salvas com sucesso!");
+    } catch (e) {
+      console.error("❌ [PostgreSQL] Erro ao salvar creds:", e.message);
+    }
+  };
   console.log("✅ [PostgreSQL] Sessão do WhatsApp vinculada com persistência e cache em memória!");
   return { state, saveCreds };
 }
@@ -1233,8 +1241,10 @@ async function startWhatsApp() {
   try {
     const { state, saveCreds } = await usePostgresAuthState();
     const logger = pino({ level: "silent" });
+    const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1043857760] }));
 
     sock = makeWASocket({
+      version,
       auth: state,
       logger,
       printQRInTerminal: false,
@@ -1244,6 +1254,7 @@ async function startWhatsApp() {
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
       keepAliveIntervalMs: 25000,
+      qrTimeout: 120000,
       generateHighQualityLinkPreview: false,
       getMessage: async () => ({
         conversation: "ok",
@@ -1276,13 +1287,6 @@ async function startWhatsApp() {
           disconnectCount: (lastDisconnectInfo.disconnectCount || 0) + 1,
         };
 
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-        console.log(`Conexão fechada. Status: ${statusCode} (${errorMsg}), Reconectar: ${shouldReconnect}`);
-        status = "DISCONNECTED";
-        qrCodeBase64 = null;
-        connectedPhone = null;
-
         if (sock) {
           try {
             sock.ev?.removeAllListeners();
@@ -1291,32 +1295,55 @@ async function startWhatsApp() {
           sock = null;
         }
 
-        // Se o WhatsApp revogou a sessão (logout explícito ou token invalidado)
-        if (statusCode === DisconnectReason.loggedOut) {
-          console.warn(">>> [WhatsApp] DisconnectReason.loggedOut (401) recebido. Limpando credenciais revogadas para permitir novo pareamento via QR Code...");
-          sessionCache.clear();
-          await clearPostgresSession();
+        // Verifica se a sessão já está pareada/registrada
+        const isRegistered = Boolean(state?.creds?.registered && (state?.creds?.me?.id || sock?.user?.id));
+
+        // CASO A: Se ainda está no processo de pareamento pelo QR Code
+        if (!isRegistered) {
+          console.log(`[WhatsApp] Ciclo de pareamento renovando QR Code (${statusCode || "timeout"})...`);
+          // Mantém CONNECTING e PRESERVA qrCodeBase64 para a tela do usuário não ficar piscando "Desconectado"
+          status = "CONNECTING";
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
             reconnectTimeout = null;
             startWhatsApp();
-          }, 3000);
+          }, 1500);
+          return;
         }
 
+        // CASO B: Se a sessão JÁ ESTAVA PAREADA e o usuário fez logout no celular (401)
+        if (statusCode === DisconnectReason.loggedOut) {
+          console.warn(">>> [WhatsApp] Sessão existente revogada no celular (401). Limpando credenciais antigas...");
+          sessionCache.clear();
+          await clearPostgresSession();
+          status = "CONNECTING";
+          qrCodeBase64 = null;
+          connectedPhone = null;
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            startWhatsApp();
+          }, 2000);
+          return;
+        }
+
+        // CASO C: Conflito 440 (duas instâncias conectadas ao mesmo tempo)
         if (statusCode === 440) {
           console.warn(`>>> [WhatsApp][${INSTANCE_ID}] Conflito 440 detectado. Liberando liderança e aguardando...`);
           releaseLeader();
         }
 
-        if (shouldReconnect) {
-          const delay = statusCode === DisconnectReason.restartRequired ? 1000 : (statusCode === 440 ? 12000 : 3500);
-          console.log(`>>> [WhatsApp][${INSTANCE_ID}] Reconectando automaticamente em ${delay}ms com credenciais salvas...`);
-          if (reconnectTimeout) clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(() => {
-            reconnectTimeout = null;
-            startWhatsApp();
-          }, delay);
-        }
+        // CASO D: Queda normal de rede ou restart
+        status = "DISCONNECTED";
+        qrCodeBase64 = null;
+        connectedPhone = null;
+        const delay = statusCode === DisconnectReason.restartRequired ? 1000 : (statusCode === 440 ? 12000 : 3500);
+        console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conexão fechada (${statusCode}: ${errorMsg}). Reconectando em ${delay}ms...`);
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(() => {
+          reconnectTimeout = null;
+          startWhatsApp();
+        }, delay);
       } else if (connection === "open") {
         console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conectado com sucesso com sessão persistida no PostgreSQL!`);
         status = "CONNECTED";
