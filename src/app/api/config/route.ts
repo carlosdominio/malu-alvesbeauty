@@ -1,22 +1,32 @@
 import { NextResponse } from "next/server";
 import { ServerStore } from "@/lib/serverStore";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import {
+  isSupabaseConfigured,
+  supabase,
+  toSupabaseConfigPayload,
+  fromSupabaseConfigPayload,
+} from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
+    const configServidor = ServerStore.getConfig();
+
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase.from("barbearia_config").select("*").limit(1).single();
       if (!error && data) {
-        return NextResponse.json(data);
+        const configCombinado = fromSupabaseConfigPayload(data, configServidor);
+        // Garante que o ServerStore (data_storage.json) também fica com a versão mais recente
+        ServerStore.updateConfig(configCombinado);
+        return NextResponse.json(configCombinado);
       }
     }
-    const config = ServerStore.getConfig();
-    return NextResponse.json(config);
+
+    return NextResponse.json(configServidor);
   } catch (error) {
     console.error("Erro ao buscar configurações:", error);
-    return NextResponse.json({ error: "Erro interno ao buscar configurações" }, { status: 500 });
+    return NextResponse.json(ServerStore.getConfig());
   }
 }
 
@@ -27,7 +37,13 @@ export async function POST(req: Request) {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from("barbearia_config").upsert(atualizado);
+        const payloadSupabase = toSupabaseConfigPayload(atualizado);
+        const { error } = await supabase.from("barbearia_config").upsert(payloadSupabase);
+        if (error) {
+          console.error("Erro no upsert de config no Supabase:", error.message);
+        } else {
+          console.log(">>> [Supabase] Configurações e Mensagens salvas com sucesso!");
+        }
       } catch (err) {
         console.error("Erro ao atualizar config no Supabase:", err);
       }

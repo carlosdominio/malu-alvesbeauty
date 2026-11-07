@@ -197,7 +197,18 @@ function formatarMoeda(valor) {
 function lerBancoCentral() {
   try {
     if (fs.existsSync(dbPath)) {
-      return JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+      const data = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+      if (data.config && typeof data.config.mensagem_boas_vindas === "string" && data.config.mensagem_boas_vindas.trim().startsWith("{")) {
+        try {
+          const extra = JSON.parse(data.config.mensagem_boas_vindas);
+          data.config = {
+            ...data.config,
+            ...extra,
+            mensagem_boas_vindas: typeof extra.bio === "string" ? extra.bio : data.config.mensagem_boas_vindas,
+          };
+        } catch (e) {}
+      }
+      return data;
     }
   } catch (e) {
     console.error("Erro ao ler data_storage.json:", e);

@@ -16,7 +16,12 @@ import {
   expedienteInicial,
   servicosIniciais,
 } from "./mockData";
-import { isSupabaseConfigured, supabase } from "./supabase";
+import {
+  isSupabaseConfigured,
+  supabase,
+  toSupabaseConfigPayload,
+  fromSupabaseConfigPayload,
+} from "./supabase";
 
 const KEYS = {
   CONFIG: "barber_os_config",
@@ -75,11 +80,40 @@ if (typeof window !== "undefined") {
 export const DataStore = {
   // 1. CONFIGURAÇÃO DA BARBEARIA
   async getConfig(): Promise<BarbeariaConfig> {
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from("barbearia_config").select("*").limit(1).single();
-      if (!error && data) return data as BarbeariaConfig;
+    const local = getLocal<BarbeariaConfig>(KEYS.CONFIG, configInicial);
+
+    // 1. Prioridade: Buscar via endpoint da API Next.js (combina ServerStore + Supabase com tratamento completo)
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch("/api/config", { cache: "no-store" });
+        if (res.ok) {
+          const apiConfig = await res.json();
+          if (apiConfig && typeof apiConfig === "object") {
+            const mesclado = { ...local, ...apiConfig };
+            setLocal(KEYS.CONFIG, mesclado);
+            return mesclado as BarbeariaConfig;
+          }
+        }
+      } catch (e) {
+        console.warn("Falha ao buscar config via /api/config:", e);
+      }
     }
-    return getLocal<BarbeariaConfig>(KEYS.CONFIG, configInicial);
+
+    // 2. Se a API não responder, consultar Supabase com decodificação de mensagens
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from("barbearia_config").select("*").limit(1).single();
+        if (!error && data) {
+          const decodificado = fromSupabaseConfigPayload(data, local);
+          setLocal(KEYS.CONFIG, decodificado);
+          return decodificado;
+        }
+      } catch (e) {
+        console.warn("Falha ao consultar config no Supabase:", e);
+      }
+    }
+
+    return local;
   },
 
   async updateConfig(config: Partial<BarbeariaConfig>): Promise<BarbeariaConfig> {
@@ -87,6 +121,7 @@ export const DataStore = {
     const atualizado = { ...atual, ...config };
     setLocal(KEYS.CONFIG, atualizado);
 
+    // Salvar no servidor (data_storage.json) e sincronizar
     try {
       await fetch("/api/config", {
         method: "POST",
@@ -97,8 +132,14 @@ export const DataStore = {
       console.error("Erro ao sincronizar config via API:", e);
     }
 
+    // Salvar no Supabase com payload seguro
     if (isSupabaseConfigured && supabase) {
-      await supabase.from("barbearia_config").upsert(atualizado);
+      try {
+        const payloadSupabase = toSupabaseConfigPayload(atualizado);
+        await supabase.from("barbearia_config").upsert(payloadSupabase);
+      } catch (err) {
+        console.error("Erro ao atualizar config direto no Supabase:", err);
+      }
     }
     return atualizado;
   },
