@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { telefone, nome, dataHora } = body;
+    const { tipo = "SINAL_EXPIRADO", telefone, nome, dataHora, servicoTitulo, servicoId, valor, valorSinal, motivo } = body;
 
     const whatsappUrl =
       process.env.WHATSAPP_SERVER_URL ||
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const res = await fetch(`${whatsappUrl}/cancel-notify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telefone, nome, dataHora }),
+      body: JSON.stringify({ tipo, telefone, nome, dataHora, servicoTitulo, servicoId, valor, valorSinal, motivo }),
       cache: "no-store",
     });
 

@@ -17,6 +17,7 @@ export const configInicial: BarbeariaConfig = {
   tempo_limite_sinal_minutos: 30,
   auto_liberar_sinal_expirado: true,
   tolerancia_auto_liberacao_minutos: 15,
+  tempo_inatividade_bot_minutos: 15,
   regra_fidelidade_cortes: 5,
   porcentagem_desconto_fidelidade: 20,
   auto_limpeza_cancelados_dias: 7,

@@ -183,7 +183,7 @@ export const ServerStore = {
           ag.observacoes = (ag.observacoes ? ag.observacoes + " • " : "") + "Cancelado automaticamente (sinal PIX expirado)";
           alterado = true;
 
-          // Disparar cancelamento e notificação educada no WhatsApp
+          // Disparar cancelamento e notificação educada no WhatsApp com opções de recuperação
           const whatsappUrl =
             process.env.WHATSAPP_SERVER_URL ||
             process.env.NEXT_PUBLIC_WHATSAPP_SERVER_URL ||
@@ -193,9 +193,14 @@ export const ServerStore = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              tipo: "SINAL_EXPIRADO",
               telefone: ag.cliente_telefone,
               nome: ag.cliente_nome,
               dataHora: ag.horario_inicio,
+              servicoTitulo: ag.servico_titulo,
+              servicoId: ag.servico_id,
+              valor: ag.valor_cobrado,
+              valorSinal: ag.valor_sinal,
               motivo: "Prazo para envio do sinal PIX expirado",
             }),
           }).catch((e) => console.error("Erro ao notificar cancelamento por sinal expirado:", e));

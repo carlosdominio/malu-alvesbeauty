@@ -16,7 +16,9 @@ export interface MensagensWhatsAppConfig {
   lembrete_2h?: string;
   agradecimento_fidelidade?: string;
   cancelamento_studio?: string;
+  cancelamento_sinal_expirado?: string;
   falta_comparecimento?: string;
+  inatividade_encerramento?: string;
   respostas_personalizadas?: RespostaAutomatica[];
 }
 
@@ -37,6 +39,7 @@ export interface BarbeariaConfig {
   tempo_limite_sinal_minutos?: number;
   auto_liberar_sinal_expirado?: boolean; // Libera automaticamente a vaga se passar do prazo + tolerância
   tolerancia_auto_liberacao_minutos?: number; // Tolerância de segurança em minutos (padrão: 15 min)
+  tempo_inatividade_bot_minutos?: number; // Tempo limite para o bot encerrar atendimento por inatividade (padrão: 15 min)
   regra_fidelidade_cortes?: number; // Ex: A cada 5 atendimentos ganha desconto
   porcentagem_desconto_fidelidade?: number; // Ex: 20%
   auto_limpeza_cancelados_dias?: number; // 0 = Desativado, 7, 15, 30, 60 dias

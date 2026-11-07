@@ -152,6 +152,39 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
+// Monitor de inatividade de conversas (a cada 2 minutos)
+setInterval(async () => {
+  if (!sock) return;
+  try {
+    const db = lerBancoCentral();
+    const timeoutMin = db.config?.tempo_inatividade_bot_minutos || 15;
+    const timeoutMs = timeoutMin * 60 * 1000;
+    const agoraMs = Date.now();
+    const stepsMonitorados = ["ESCOLHENDO_SERVICO", "ESCOLHENDO_DIA", "ESCOLHENDO_HORARIO", "SINAL_EXPIRADO_MENU"];
+
+    for (const [jid, session] of userSessions.entries()) {
+      if (session && stepsMonitorados.includes(session.step) && session.lastActivity) {
+        if (agoraMs - session.lastActivity >= timeoutMs && !session.avisoInatividadeEnviado) {
+          session.avisoInatividadeEnviado = true;
+          const nomeCli = session.nomeCliente || "Cliente";
+
+          const msgInatividade = db.config?.mensagens_zap?.inatividade_encerramento
+            ? formatarMensagemZap(db.config.mensagens_zap.inatividade_encerramento, { cliente: nomeCli })
+            : `🌸 *Atendimento pausado por inatividade* ⏳\n\n` +
+              `Olá, *${nomeCli}*! Notamos que você não respondeu há algum tempo, então encerramos este atendimento para liberar o sistema.\n\n` +
+              `Quando desejar agendar ou tirar dúvidas no *Studio Malu Alves Beauty*, basta nos mandar um *Oi* por aqui! Teremos o maior prazer em atender você! ✨`;
+
+          console.log(`>>> [Inatividade Auto-Close] Encerrando sessão de ${jid} (${nomeCli}) após ${timeoutMin} minutos de inatividade.`);
+          userSessions.set(jid, { step: "INICIAL", lastActivity: agoraMs });
+          await enviarMensagemHumana(jid, msgInatividade);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Erro no monitor de inatividade:", err);
+  }
+}, 2 * 60 * 1000);
+
 // Helper para sleep/delay
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -424,6 +457,44 @@ async function aprovarComprovanteCliente(telefoneLimpo) {
   return null;
 }
 
+// Verificar se um horário específico (ex: 2026-11-07T10:00:00) continua disponível na agenda
+async function verificarSeHorarioLivre(dataHoraIso) {
+  if (!dataHoraIso) return false;
+  try {
+    const appUrl = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
+    let ags = [];
+    try {
+      const res = await fetch(`${appUrl}/api/agendamentos`);
+      if (res.ok) {
+        ags = await res.json();
+      }
+    } catch (e) {
+      // Fallback local
+    }
+    if (!ags || ags.length === 0) {
+      const db = lerBancoCentral();
+      ags = db.agendamentos || [];
+    }
+
+    const agora = new Date();
+    const dataHoraAlvo = new Date(dataHoraIso);
+    if (dataHoraAlvo.getTime() <= agora.getTime()) {
+      return false; // Horário já no passado
+    }
+
+    // O horário está ocupado se houver algum agendamento ativo (não cancelado)
+    const ocupado = ags.some((a) => {
+      if (a.status === "CANCELADO") return false;
+      return a.horario_inicio === dataHoraIso || a.horario_inicio.startsWith(dataHoraIso.slice(0, 16));
+    });
+
+    return !ocupado;
+  } catch (err) {
+    console.error("Erro ao verificar disponibilidade do horário:", err);
+    return false;
+  }
+}
+
 // Envio com COMPORTAMENTO HUMANO ANTI-BAN
 async function enviarMensagemHumana(remoteJid, texto) {
   if (!sock) return;
@@ -503,6 +574,21 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   const textoLimpo = (textoUsuario || "").trim().toLowerCase();
   let session = userSessions.get(remoteJid) || { step: "INICIAL" };
   let resposta = "";
+
+  const agoraMs = Date.now();
+  const db = lerBancoCentral();
+  const timeoutMin = db.config?.tempo_inatividade_bot_minutos || 15;
+  const timeoutMs = timeoutMin * 60 * 1000;
+
+  // Auto-reset por inatividade caso a conversa anterior tenha sido abandonada
+  if (session.step && session.step !== "INICIAL" && session.lastActivity) {
+    const tempoInativo = agoraMs - session.lastActivity;
+    if (tempoInativo > timeoutMs && session.step !== "AGUARDANDO_COMPROVANTE") {
+      console.log(`>>> [Inatividade] Sessão de ${remoteJid} expirou (${Math.round(tempoInativo / 60000)}m > ${timeoutMin}m). Resetando para INICIAL.`);
+      session = { step: "INICIAL", lastActivity: agoraMs };
+    }
+  }
+  session.lastActivity = agoraMs;
 
   const letras = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
   const telefoneFinal = realPhone || remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "").replace(/\D/g, "");
@@ -862,6 +948,118 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
     }
   }
 
+  // =========================================================================
+  // ETAPA: SINAL EXPIRADO - RECUPERAÇÃO INTERATIVA
+  // =========================================================================
+  else if (session.step === "SINAL_EXPIRADO_MENU") {
+    const nomeCli = session.nomeCliente || nomeDetectado;
+    const srv = session.servico || servicosAtivos[0];
+    const dataHoraOrig = session.dataHoraOriginal;
+    const horaOrigStr = dataHoraOrig ? dataHoraOrig.split("T")[1]?.slice(0, 5) : "";
+    const dataPart = dataHoraOrig ? dataHoraOrig.split("T")[0] : "";
+    const dataFormatada = dataPart ? dataPart.split("-").reverse().slice(0, 2).join("/") : "hoje";
+
+    if (
+      textoLimpo === "1" ||
+      textoLimpo.includes("mesmo") ||
+      textoLimpo.includes("verificar") ||
+      textoLimpo.includes("ainda") ||
+      textoLimpo.includes("livre")
+    ) {
+      // Verificar em tempo real se o mesmo horário continua vago
+      const livre = await verificarSeHorarioLivre(dataHoraOrig);
+      const cfg = db.config || {};
+      const chavePix = cfg.chave_pix || "82981430673";
+      const titularPix = cfg.titular_pix || "Luisa Alves dos Santos";
+      const valorSinal = session.valorSinal || Math.round((srv.preco || 30) * 0.3);
+      const tempoLimite = cfg.tempo_limite_sinal_minutos || 30;
+
+      if (livre) {
+        // Horário continua disponível! Reativa a reserva no sistema
+        await salvarAgendamentoNoPainel({
+          cliente_nome: nomeCli,
+          cliente_telefone: telefoneFinal,
+          servico: srv,
+          horario_inicio: dataHoraOrig,
+          origem: "WHATSAPP",
+          status: "AGUARDANDO_SINAL",
+          valor_sinal: valorSinal,
+        });
+
+        session = {
+          step: "AGUARDANDO_COMPROVANTE",
+          servico: srv,
+          valorSinal,
+          nomeCliente: nomeCli,
+          horarioEscolhido: horaOrigStr,
+          dataHoraOriginal: dataHoraOrig,
+          lastActivity: Date.now(),
+        };
+
+        resposta =
+          `🎉 *Ótima notícia, ${nomeCli}!* ✨\n\n` +
+          `O horário de *${dataFormatada} às ${horaOrigStr}* para *${srv.titulo}* ainda continua livre na agenda!\n\n` +
+          `Reservamos novamente sua vaga! Para garantir com exclusividade:\n\n` +
+          `💰 *Valor do Sinal:* *${formatarMoeda(valorSinal)}*\n` +
+          `🔑 *CHAVE PIX (Celular):*\n` +
+          `\`${chavePix}\`\n` +
+          `*Titular:* ${titularPix}\n\n` +
+          `⏳ *Tempo limite:* *${tempoLimite} minutos*.\n` +
+          `Por favor, envie o comprovante do PIX por aqui para confirmarmos seu horário imediatamente! 🌸`;
+      } else {
+        const diasDisponiveis = gerarDiasDisponiveis();
+        session = {
+          step: "ESCOLHENDO_DIA",
+          servico: srv,
+          diasDisponiveis,
+          nomeCliente: nomeCli,
+          lastActivity: Date.now(),
+        };
+
+        const listaDias = diasDisponiveis.map((d, i) => `*${i + 1}* - ${d.rotulo}`).join("\n");
+        resposta =
+          `😔 *Puxa, ${nomeCli}!* O horário de *${dataFormatada} às ${horaOrigStr}* acabou de ser preenchido por outra cliente ou já encerrou.\n\n` +
+          `Mas não se preocupe! Vamos escolher outra data para o seu *${srv.titulo}*:\n\n` +
+          `📅 *Escolha o melhor dia:*\n\n${listaDias}\n\n` +
+          `_Digite o número da data desejada (ou digite *Menu* para escolher outro procedimento):_`;
+      }
+    } else if (
+      textoLimpo === "2" ||
+      textoLimpo.includes("menu") ||
+      textoLimpo.includes("procedimento") ||
+      textoLimpo.includes("serviço") ||
+      textoLimpo.includes("outro") ||
+      textoLimpo.includes("dias")
+    ) {
+      resposta =
+        `✨ *Escolha o procedimento desejado:*\n\n` +
+        formatarListaServicosZap(servicosAtivos) +
+        `\n\n_Digite o número do procedimento desejado (ex: 1, 2 ou 3):_`;
+      session = {
+        step: "ESCOLHENDO_SERVICO",
+        nomeCliente: nomeCli,
+        lastActivity: Date.now(),
+      };
+    } else if (
+      textoLimpo === "3" ||
+      textoLimpo.includes("dono") ||
+      textoLimpo.includes("designer") ||
+      textoLimpo.includes("humano") ||
+      textoLimpo.includes("atendente")
+    ) {
+      resposta = `👩‍💼 Um momento, ${nomeCli}! Já notifiquei a designer Malu Alves e ela irá falar com você em instantes por aqui. 💖`;
+      session = { step: "INICIAL", lastActivity: Date.now() };
+    } else {
+      resposta =
+        `Como posso te ajudar com a sua reserva, ${nomeCli}?\n\n` +
+        `*1* ➔ Verificar se o mesmo horário (${dataFormatada} às ${horaOrigStr}) ainda está livre\n` +
+        `*2* ➔ Ver outros dias e procedimentos disponíveis\n` +
+        `*3* ➔ Falar com a Designer\n\n` +
+        `_Digite 1, 2 ou 3:_`;
+    }
+  }
+
+  session.lastActivity = Date.now();
   userSessions.set(remoteJid, session);
   return resposta;
 }
@@ -1012,6 +1210,62 @@ async function disconnectWhatsApp() {
   } catch (e) {
     console.error("Erro ao desconectar:", e);
   }
+}
+
+// 0. Mensagem Educada e Interativa de Liberação de Vaga por Sinal PIX Expirado
+async function notificarCancelamentoSinalExpirado(dados) {
+  const { telefone, nome, dataHora, servicoTitulo, servicoId, valor, valorSinal } = dados;
+  const targetJid = await resolverRemoteJid(telefone);
+  if (!sock || !targetJid) {
+    console.error(`>>> [Sinal Expirado] Não foi possível resolver targetJid para telefone: ${telefone}`);
+    return false;
+  }
+
+  const horaStr = dataHora ? dataHora.split("T")[1]?.slice(0, 5) : "";
+  const dataPart = dataHora ? dataHora.split("T")[0] : "";
+  const dataFormatada = dataPart ? dataPart.split("-").reverse().slice(0, 2).join("/") : "hoje";
+
+  const db = lerBancoCentral();
+  const servicos = obterServicosAtivos();
+  const srvObj = servicos.find((s) => s.id === servicoId || s.titulo === servicoTitulo) || {
+    id: servicoId || "serv-1",
+    titulo: servicoTitulo || "Design de Sobrancelhas",
+    preco: Number(valor) || 30,
+    duracao_minutos: 30,
+  };
+
+  const valorFinal = Number(valor) || srvObj.preco || 30;
+  const sinalFinal = Number(valorSinal) || Math.round(valorFinal * 0.3);
+
+  const mensagem = db.config?.mensagens_zap?.cancelamento_sinal_expirado
+    ? formatarMensagemZap(db.config.mensagens_zap.cancelamento_sinal_expirado, {
+        cliente: nome || "Cliente",
+        servico: srvObj.titulo,
+        data: dataFormatada,
+        horario: horaStr,
+        valor_sinal: formatarMoeda(sinalFinal),
+      })
+    : `⏳ *Aviso sobre sua pré-reserva no Studio Malu Alves Beauty* 🌸\n\n` +
+      `Olá, *${nome || "Cliente"}*! O prazo para envio do sinal PIX referente ao procedimento *${srvObj.titulo}* (*${dataFormatada}* às *${horaStr}*) expirou e a vaga precisou ser liberada na agenda.\n\n` +
+      `Mas você ainda pode garantir seu horário! O que prefere fazer?\n\n` +
+      `*1* ➔ Verificar se o mesmo horário ainda está livre para reservar agora\n` +
+      `*2* ➔ Ver outros dias e procedimentos disponíveis\n` +
+      `*3* ➔ Falar com a Designer\n\n` +
+      `_Digite o número da opção desejada:_`;
+
+  console.log(`>>> [Sinal Expirado] Enviando recuperação interativa para ${targetJid} (${nome})...`);
+  userSessions.set(targetJid, {
+    step: "SINAL_EXPIRADO_MENU",
+    nomeCliente: nome || "Cliente",
+    servico: srvObj,
+    dataHoraOriginal: dataHora,
+    valorSinal: sinalFinal,
+    valorTotal: valorFinal,
+    lastActivity: Date.now(),
+  });
+
+  await enviarMensagemHumana(targetJid, mensagem);
+  return true;
 }
 
 // 1. Mensagem de Cancelamento pelo Studio
@@ -1236,13 +1490,39 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === "/cancel-notify" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", async () => {
+      try {
+        const dados = JSON.parse(body);
+        const { tipo, telefone, nome, servicoTitulo, dataHora, motivo } = dados;
+        const ehSinalExpirado = tipo === "SINAL_EXPIRADO" || (motivo && String(motivo).toLowerCase().includes("sinal"));
+
+        if (ehSinalExpirado) {
+          await notificarCancelamentoSinalExpirado(dados);
+        } else {
+          await notificarCancelamentoAdmin(telefone, nome, dataHora);
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true, message: "Cancelamento processado com sucesso" }));
+      } catch (err) {
+        console.error("Erro na rota /cancel-notify:", err);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   if (req.url === "/notify" && req.method === "POST") {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", async () => {
       try {
         const dados = JSON.parse(body);
-        const { tipo, telefone, nome, servicoTitulo, dataHora, valor, totalVisitas } = dados;
+        const { tipo, telefone, nome, servicoTitulo, dataHora, valor, totalVisitas, motivo } = dados;
 
         if (tipo === "SOLICITAR_SINAL_WEB") {
           await notificarSolicitacaoSinalWeb(dados);
@@ -1252,6 +1532,8 @@ const server = http.createServer(async (req, res) => {
           await notificarConclusaoAdmin(telefone, nome, totalVisitas);
         } else if (tipo === "FALTOU") {
           await notificarFaltaAdmin(telefone, nome, servicoTitulo, dataHora);
+        } else if (tipo === "SINAL_EXPIRADO" || (tipo === "CANCELADO" && String(motivo || "").toLowerCase().includes("sinal"))) {
+          await notificarCancelamentoSinalExpirado(dados);
         } else if (tipo === "CANCELADO") {
           await notificarCancelamentoAdmin(telefone, nome, dataHora);
         }

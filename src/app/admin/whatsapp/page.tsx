@@ -89,6 +89,8 @@ export default function WhatsAppPage() {
   const [msgAgradecimento, setMsgAgradecimento] = useState("");
   const [msgFalta, setMsgFalta] = useState("");
   const [msgCancelamento, setMsgCancelamento] = useState("");
+  const [msgSinalExpirado, setMsgSinalExpirado] = useState("");
+  const [msgInatividade, setMsgInatividade] = useState("");
   const [salvandoMensagens, setSalvandoMensagens] = useState(false);
   const [mensagemSalvaSucesso, setMensagemSalvaSucesso] = useState(false);
 
@@ -128,6 +130,8 @@ export default function WhatsAppPage() {
       setMsgAgradecimento(zapCfg?.agradecimento_fidelidade || MENSAGENS_PADRAO.agradecimento_fidelidade);
       setMsgFalta(zapCfg?.falta_comparecimento || MENSAGENS_PADRAO.falta_comparecimento);
       setMsgCancelamento(zapCfg?.cancelamento_studio || MENSAGENS_PADRAO.cancelamento_studio);
+      setMsgSinalExpirado(zapCfg?.cancelamento_sinal_expirado || MENSAGENS_PADRAO.cancelamento_sinal_expirado);
+      setMsgInatividade(zapCfg?.inatividade_encerramento || MENSAGENS_PADRAO.inatividade_encerramento);
 
       // Inicializa as respostas customizadas
       setRespostasCustom(zapCfg?.respostas_personalizadas || RESPOSTAS_PADRAO_EXEMPLOS);
@@ -254,6 +258,8 @@ export default function WhatsAppPage() {
           agradecimento_fidelidade: msgAgradecimento,
           falta_comparecimento: msgFalta,
           cancelamento_studio: msgCancelamento,
+          cancelamento_sinal_expirado: msgSinalExpirado,
+          inatividade_encerramento: msgInatividade,
           respostas_personalizadas: respostasCustom,
         },
       };
@@ -1172,6 +1178,60 @@ export default function WhatsAppPage() {
               />
               <p className="text-[10px] text-zinc-500">
                 Variáveis: <code className="text-amber-400">{"{cliente}"}</code>, <code className="text-amber-400">{"{data}"}</code>, <code className="text-amber-400">{"{horario}"}</code>
+              </p>
+            </div>
+
+            {/* 8. LIBERAÇÃO DE VAGA POR SINAL EXPIRADO */}
+            <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2.5 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-100">8. Liberação de Vaga por Sinal Expirado (com Menu de Recuperação)</h4>
+                  <p className="text-[11px] text-zinc-400">Enviada quando a pré-reserva expira sem o envio do comprovante PIX, oferecendo opções interativas</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMsgSinalExpirado(MENSAGENS_PADRAO.cancelamento_sinal_expirado)}
+                  className="text-[11px] text-zinc-400 hover:text-amber-400 underline font-semibold"
+                >
+                  Restaurar Padrão
+                </button>
+              </div>
+
+              <textarea
+                rows={7}
+                value={msgSinalExpirado}
+                onChange={(e) => setMsgSinalExpirado(e.target.value)}
+                className="w-full p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 font-mono leading-relaxed focus:outline-none focus:border-amber-500"
+              />
+              <p className="text-[10px] text-zinc-500">
+                Variáveis: <code className="text-amber-400">{"{cliente}"}</code>, <code className="text-amber-400">{"{servico}"}</code>, <code className="text-amber-400">{"{data}"}</code>, <code className="text-amber-400">{"{horario}"}</code>, <code className="text-amber-400">{"{valor_sinal}"}</code>
+              </p>
+            </div>
+
+            {/* 9. ENCERRAMENTO POR INATIVIDADE */}
+            <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2.5 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-100">9. Encerramento Educado por Inatividade</h4>
+                  <p className="text-[11px] text-zinc-400">Enviada quando o cliente para de responder no meio de uma escolha de procedimento/horário</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMsgInatividade(MENSAGENS_PADRAO.inatividade_encerramento)}
+                  className="text-[11px] text-zinc-400 hover:text-amber-400 underline font-semibold"
+                >
+                  Restaurar Padrão
+                </button>
+              </div>
+
+              <textarea
+                rows={4}
+                value={msgInatividade}
+                onChange={(e) => setMsgInatividade(e.target.value)}
+                className="w-full p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 font-mono leading-relaxed focus:outline-none focus:border-amber-500"
+              />
+              <p className="text-[10px] text-zinc-500">
+                Variáveis: <code className="text-amber-400">{"{cliente}"}</code>
               </p>
             </div>
           </div>

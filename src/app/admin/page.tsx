@@ -253,20 +253,29 @@ export default function AgendaPage() {
           }),
         }).catch(console.error);
       } else if (novoStatus === "CANCELADO") {
+        const eraSinalPendente = ag.status === "AGUARDANDO_SINAL";
+
         fetch("/api/whatsapp/notify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tipo: "CANCELADO",
+            tipo: eraSinalPendente ? "SINAL_EXPIRADO" : "CANCELADO",
             telefone: ag.cliente_telefone,
             nome: ag.cliente_nome,
+            servicoTitulo: ag.servico_titulo,
+            servicoId: ag.servico_id,
             dataHora: ag.horario_inicio,
+            valor: ag.valor_cobrado,
+            valorSinal: ag.valor_sinal,
+            motivo: eraSinalPendente ? "Prazo para envio do sinal PIX expirado" : undefined,
           }),
         }).catch(console.error);
 
         toastWarning(
           "Agendamento Cancelado",
-          `Cliente ${ag.cliente_nome} notificado no WhatsApp com opção para remarcar.`
+          eraSinalPendente
+            ? `Vaga liberada! Cliente ${ag.cliente_nome} notificado no WhatsApp com menu para reativar ou escolher outro horário.`
+            : `Cliente ${ag.cliente_nome} notificado no WhatsApp com opção para remarcar.`
         );
       } else if (novoStatus === "FALTOU") {
         fetch("/api/whatsapp/notify", {

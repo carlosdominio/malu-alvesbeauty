@@ -385,6 +385,32 @@ export default function ConfigPage() {
                     </p>
                   </div>
                 )}
+
+                {/* Tempo Limite de Inatividade do WhatsApp */}
+                <div className="pt-2 border-t border-zinc-800/60">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-amber-400 block mb-1">
+                    Tempo Limite de Inatividade no WhatsApp (Sessões Abandonadas)
+                  </label>
+                  <select
+                    value={config.tempo_inatividade_bot_minutos ?? 15}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        tempo_inatividade_bot_minutos: parseInt(e.target.value, 10) || 15,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-semibold"
+                  >
+                    <option value="5">5 minutos de inatividade</option>
+                    <option value="10">10 minutos de inatividade</option>
+                    <option value="15">15 minutos de inatividade (Recomendado)</option>
+                    <option value="20">20 minutos de inatividade</option>
+                    <option value="30">30 minutos de inatividade</option>
+                  </select>
+                  <p className="text-[10px] text-zinc-400 mt-1">
+                    Se a cliente parar de responder no meio de uma conversa (escolha de serviço/data/horário), o robô encerra educadamente para não travar mensagens futuras.
+                  </p>
+                </div>
               </div>
 
               {/* Preview da Mensagem enviada pelo Robô */}

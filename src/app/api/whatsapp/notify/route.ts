@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { tipo, telefone, nome, servicoTitulo, dataHora, totalVisitas } = body;
+    const { tipo, telefone, nome, servicoTitulo, servicoId, dataHora, valor, valorSinal, totalVisitas, motivo } = body;
 
     const whatsappUrl =
       process.env.WHATSAPP_SERVER_URL ||
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const res = await fetch(`${whatsappUrl}/notify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo, telefone, nome, servicoTitulo, dataHora, totalVisitas }),
+      body: JSON.stringify({ tipo, telefone, nome, servicoTitulo, servicoId, dataHora, valor, valorSinal, totalVisitas, motivo }),
       cache: "no-store",
     });
 

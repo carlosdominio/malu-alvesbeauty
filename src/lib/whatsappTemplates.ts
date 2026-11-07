@@ -67,6 +67,15 @@ export const MENSAGENS_PADRAO: Required<Omit<MensagensWhatsAppConfig, "respostas
     `*2* ➔ Falar com a Designer\n\n` +
     `_Digite o número desejado:_`,
 
+  cancelamento_sinal_expirado:
+    `⏳ *Aviso sobre sua pré-reserva no Studio Malu Alves Beauty* 🌸\n\n` +
+    `Olá, *{cliente}*! O prazo para envio do comprovante do sinal PIX referente ao procedimento *{servico}* (*{data}* às *{horario}*) expirou e a vaga precisou ser liberada na agenda.\n\n` +
+    `Mas você ainda pode garantir seu horário! O que prefere fazer?\n\n` +
+    `*1* ➔ Verificar se o mesmo horário ainda está livre para reservar agora\n` +
+    `*2* ➔ Ver outros dias e procedimentos disponíveis\n` +
+    `*3* ➔ Falar com a Designer\n\n` +
+    `_Digite o número da opção desejada:_`,
+
   falta_comparecimento:
     `👋 *Olá, {cliente}! Tudo bem?*\n\n` +
     `Notamos que você não conseguiu comparecer ao seu horário para o procedimento *{servico}*.\n\n` +
@@ -74,6 +83,11 @@ export const MENSAGENS_PADRAO: Required<Omit<MensagensWhatsAppConfig, "respostas
     `*1* ➔ Remarcar meu horário agora\n` +
     `*2* ➔ Falar com a Equipe\n\n` +
     `_Digite o número desejado:_`,
+
+  inatividade_encerramento:
+    `🌸 *Atendimento pausado por inatividade* ⏳\n\n` +
+    `Olá, *{cliente}*! Notamos que você não respondeu há algum tempo, então encerramos este atendimento para liberar o sistema.\n\n` +
+    `Quando desejar agendar ou tirar dúvidas no *Studio Malu Alves Beauty*, basta nos mandar um *Oi* por aqui! Teremos o maior prazer em atender você! ✨`,
 };
 
 export const RESPOSTAS_PADRAO_EXEMPLOS: RespostaAutomatica[] = [
