@@ -319,27 +319,65 @@ function formatarMoeda(valor) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valor);
 }
 
-// Ler dados do storage central
+const VERCEL_API_URL = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
+let remoteConfigCache = null;
+
+async function atualizarConfigRemoto() {
+  try {
+    const res = await fetch(`${VERCEL_API_URL}/api/config`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data === "object") {
+        remoteConfigCache = data;
+        try {
+          if (fs.existsSync(dbPath)) {
+            const raw = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+            raw.config = { ...(raw.config || {}), ...data };
+            fs.writeFileSync(dbPath, JSON.stringify(raw, null, 2), "utf-8");
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (err) {
+    // Falha silenciosa de sincronia de rede
+  }
+}
+
+// Sincronizar na inicialização e a cada 30 segundos
+atualizarConfigRemoto();
+setInterval(atualizarConfigRemoto, 30 * 1000);
+
+// Ler dados do storage central com sincronia em tempo real
 function lerBancoCentral() {
+  let data = { servicos: [], agendamentos: [], clientes: [], config: {} };
   try {
     if (fs.existsSync(dbPath)) {
-      const data = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
-      if (data.config && typeof data.config.mensagem_boas_vindas === "string" && data.config.mensagem_boas_vindas.trim().startsWith("{")) {
-        try {
-          const extra = JSON.parse(data.config.mensagem_boas_vindas);
-          data.config = {
-            ...data.config,
-            ...extra,
-            mensagem_boas_vindas: typeof extra.bio === "string" ? extra.bio : data.config.mensagem_boas_vindas,
-          };
-        } catch (e) {}
-      }
-      return data;
+      data = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
     }
   } catch (e) {
     console.error("Erro ao ler data_storage.json:", e);
   }
-  return { servicos: [], agendamentos: [], clientes: [], config: {} };
+
+  // Mescla com as configurações e mensagens salvas no painel (Vercel/Supabase)
+  if (remoteConfigCache) {
+    data.config = {
+      ...(data.config || {}),
+      ...remoteConfigCache,
+    };
+  }
+
+  if (data.config && typeof data.config.mensagem_boas_vindas === "string" && data.config.mensagem_boas_vindas.trim().startsWith("{")) {
+    try {
+      const extra = JSON.parse(data.config.mensagem_boas_vindas);
+      data.config = {
+        ...data.config,
+        ...extra,
+        mensagem_boas_vindas: typeof extra.bio === "string" ? extra.bio : data.config.mensagem_boas_vindas,
+      };
+    } catch (e) {}
+  }
+
+  return data;
 }
 
 // Serviços Padrão do Studio
@@ -713,6 +751,9 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   let resposta = "";
 
   const agoraMs = Date.now();
+  if (!remoteConfigCache) {
+    await atualizarConfigRemoto().catch(() => {});
+  }
   const db = lerBancoCentral();
   const timeoutMin = db.config?.tempo_inatividade_bot_minutos || 15;
   const timeoutMs = timeoutMin * 60 * 1000;

@@ -1,12 +1,12 @@
 {
   "config": {
-    "id": "cfg-1",
+    "id": "aa48a3e5-809c-49d5-b18d-c547d7920598",
     "nome_barbearia": "Studio Malu Alves Beauty",
-    "telefone_whatsapp": "82994247688",
+    "telefone_whatsapp": "829981430673",
     "tempo_buffer_minutos": 5,
     "antecedencia_minima_cancelamento_horas": 2,
     "limite_maximo_agendamentos_dia": 15,
-    "mensagem_boas_vindas": "Bem-vinda ao Studio Malu Alves Beauty! Agende seu horário com praticidade.",
+    "mensagem_boas_vindas": "Bem-vinda ao Studio Malu Alves Beauty!",
     "chave_pix": "82981430673",
     "titular_pix": "Luisa Alves dos Santos",
     "exigir_sinal": true,
@@ -18,7 +18,42 @@
     "porcentagem_desconto_fidelidade": 20,
     "auto_limpeza_cancelados_dias": 7,
     "admin_usuario": "admin",
-    "admin_senha": "Malu@2026"
+    "admin_senha": "Malu@2026",
+    "created_at": "2026-11-05 17:17:47.637155+00",
+    "mensagens_zap": {
+      "boas_vindas": "✨ *{cumprimento}! Bem-vinda ao Studio Malu Alves Beauty!* ✨\nQue a magia do Natal traga paz ao seu coração e que o Ano Novo que está chegando venha cheio de novas oportunidades e muito sucesso! Boas Festas! 🎄✨\nEu sou a assistente virtual. Como posso te ajudar hoje?\n\n*1* ➔ Agendar um Horário\n*2* ➔ Ver Nossos Procedimentos e Valores\n*3* ➔ Falar com a Equipe\n{opcoes_personalizadas}\n_Digite o número da opção desejada:_",
+      "cancelamento_sinal_expirado": "Menu teste sinal expirado",
+      "solicitacao_sinal": "✨ *PRÉ-RESERVA REALIZADA COM SUCESSO!* ✨\n.\n👤 *Cliente:* {cliente}\n✨ *Procedimento:* {servico}\n📅 *Data:* {data} às *{horario}*\n💵 *Valor Total:* {valor_total}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔒 *GARANTIA DO SEU HORÁRIO*\nPara confirmar com exclusividade a sua vaga na agenda e evitar cancelamentos, solicitamos um sinal de:\n\n💰 *Valor do Sinal:* *{valor_sinal}*\n_(O restante de {valor_restante} será pago no dia do atendimento)_\n\n🔑 *CHAVE PIX ({tipo_chave}):*\n`{chave_pix}`\n*Titular:* {titular_pix}\n\n⏳ *Atenção:* Seu horário fica pré-reservado por *{tempo_limite} minutos*.\nPor favor, envie o comprovante do PIX respondendo a esta mensagem para confirmarmos seu horário! ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "confirmacao_agendamento": "🎉 *AGENDAMENTO CONFIRMADO COM SUCESSO!* 🎉\n\n👤 *Cliente:* {cliente}\n✨ *Procedimento:* {servico}\n📅 *Data:* {data} às *{horario}*\n💵 *Valor:* {valor_total}\n📍 *Local:* Studio Malu Alves Beauty\n\n✅ Já inseri seu horário na agenda da designer! Te mandaremos um lembrete antes do horário.\n\nAguardamos você com muito carinho! ✨",
+      "lembrete_2h": "⏰ *Lembrete do seu horário hoje!* ✨\n\nOlá, *{cliente}*! Lembramos que o seu horário para *{servico}* está marcado para hoje às *{horario}* no Studio Malu Alves Beauty.\n\n📍 Local: Studio Malu Alves Beauty\nPor favor, responda com *Sim* para confirmar sua presença! Te esperamos! 🌸",
+      "agradecimento_fidelidade": "✨ *Obrigada pela preferência, {cliente}!* ✨\n\nFoi um imenso prazer atendê-la no Studio Malu Alves Beauty! Esperamos que tenha amado o resultado do seu procedimento.\n\n⭐ Você possui *{visitas} atendimento(s)* no seu Cartão Fidelidade.\n\nQuando desejar realçar seu olhar novamente, basta me mandar um *Oi* por aqui! 💖\nTenha um dia maravilhoso!",
+      "falta_comparecimento": "👋 *Olá, {cliente}! Tudo bem?*\n\nNotamos que você não conseguiu comparecer ao seu horário para o procedimento *{servico}*.\n\nImprevistos acontecem! Se quiser remarcar para outro dia ou horário, é bem fácil:\n\n*1* ➔ Remarcar meu horário agora\n*2* ➔ Falar com a Equipe\n\n_Digite o número desejado:_",
+      "cancelamento_studio": "⚠️ *Aviso do Studio Malu Alves Beauty* ⚠️\n\nOlá, *{cliente}*! Infelizmente a designer precisou desmarcar o seu horário de *{data}* às *{horario}* devido a um imprevisto.\n\nPedimos sinceras desculpas pelo transtorno! Gostaria de remarcar para outro dia ou horário?\n\n*1* ➔ Sim, ver dias e horários disponíveis\n*2* ➔ Falar com a Designer\n\n_Digite o número desejado:_",
+      "inatividade_encerramento": "🌸 *Atendimento pausado por inatividade* ⏳\n\nOlá, *{cliente}*! Notamos que você não respondeu há algum tempo, então encerramos este atendimento para liberar o sistema.\n\nQuando desejar agendar ou tirar dúvidas no *Studio Malu Alves Beauty*, basta nos mandar um *Oi* por aqui! Teremos o maior prazer em atender você! ✨",
+      "respostas_personalizadas": [
+        {
+          "id": "resp-1",
+          "opcao_numero": "4",
+          "titulo": "Localização / Endereço",
+          "palavras_chave": "endereço, endereco, onde fica, local, localizacao, localização, mapa, rua",
+          "resposta": "📍 *Studio Malu Alves Beauty*\n\nEstamos localizados em atendimento exclusivo!\n📌 Ponto de referência: Próximo à praça central.\n🚗 Ambiente climatizado e confortável para seu atendimento.",
+          "ativo": true
+        },
+        {
+          "id": "resp-2",
+          "opcao_numero": "5",
+          "titulo": "Formas de Pagamento",
+          "palavras_chave": "pagamento, pagar, cartao, cartão, pix, dinheiro, debito, credito",
+          "resposta": "💳 *Formas de Pagamento Aceitas:*\n\n• *PIX* (Instantâneo)\n• *Cartão de Crédito e Débito*\n• *Dinheiro*\n\nGarantimos total facilidade para você! ✨",
+          "ativo": true
+        }
+      ]
+    },
+    "bio": "Bem-vinda ao Studio Malu Alves Beauty!",
+    "auto_liberar_sinal_expirado": true,
+    "tolerancia_auto_liberacao_minutos": 15,
+    "tempo_inatividade_bot_minutos": 15,
+    "auto_limpeza_incluir_historico": false
   },
   "servicos": [
     {
