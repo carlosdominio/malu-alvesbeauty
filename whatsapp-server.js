@@ -225,6 +225,7 @@ async function checkAndAcquireLeader() {
         const leader = JSON.parse(res.rows[0].value);
         if (leader.instanceId === INSTANCE_ID) {
           isLeader = true;
+          startLeaderHeartbeat();
           return true;
         }
         if (now - (leader.updatedAt || 0) < 15000) {
@@ -673,18 +674,15 @@ async function verificarSeHorarioLivre(dataHoraIso) {
   }
 }
 
-// Envio com COMPORTAMENTO HUMANO ANTI-BAN
+// Envio instantâneo e ultrarrápido de mensagens
 async function enviarMensagemHumana(remoteJid, texto) {
   if (!sock) return;
   try {
-    await sock.sendPresenceUpdate("composing", remoteJid);
-    const delayDigitacao = Math.min(Math.max(texto.length * 15, 1300), 2600);
-    await sleep(delayDigitacao);
-    await sock.sendPresenceUpdate("paused", remoteJid);
+    sock.sendPresenceUpdate("composing", remoteJid).catch(() => {});
     await sock.sendMessage(remoteJid, { text: texto });
-    console.log(`>>> [WhatsApp] Mensagem enviada para ${remoteJid}`);
+    console.log(`>>> [WhatsApp] Resposta instantânea enviada com sucesso para ${remoteJid}`);
   } catch (err) {
-    console.error("Erro ao enviar mensagem humana:", err);
+    console.error("Erro ao enviar mensagem:", err);
   }
 }
 
@@ -1277,7 +1275,11 @@ async function startWhatsApp(force = false) {
   if (sock) {
     try {
       sock.ev?.removeAllListeners();
-      sock.ws?.close();
+      if (typeof sock.end === "function") {
+        sock.end(undefined);
+      } else if (sock.ws) {
+        sock.ws.close();
+      }
     } catch (_) {}
     sock = null;
   }
@@ -1297,7 +1299,7 @@ async function startWhatsApp(force = false) {
       markOnlineOnConnect: false,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 25000,
+      keepAliveIntervalMs: 10000,
       qrTimeout: 120000,
       generateHighQualityLinkPreview: false,
       getMessage: async () => ({
@@ -1335,7 +1337,11 @@ async function startWhatsApp(force = false) {
         if (sock) {
           try {
             sock.ev?.removeAllListeners();
-            sock.ws?.close();
+            if (typeof sock.end === "function") {
+              sock.end(undefined);
+            } else if (sock.ws) {
+              sock.ws.close();
+            }
           } catch (_) {}
           sock = null;
         }
@@ -1376,15 +1382,14 @@ async function startWhatsApp(force = false) {
 
         // CASO C: Conflito 440 (duas instâncias conectadas ao mesmo tempo)
         if (statusCode === 440) {
-          console.warn(`>>> [WhatsApp][${INSTANCE_ID}] Conflito 440 detectado. Liberando liderança e aguardando...`);
-          releaseLeader();
+          console.warn(`>>> [WhatsApp][${INSTANCE_ID}] Conflito 440 detectado. Aguardando 15s para a outra conexão encerrar...`);
         }
 
         // CASO D: Queda normal de rede ou restart
         status = "DISCONNECTED";
         qrCodeBase64 = null;
         connectedPhone = null;
-        const delay = statusCode === DisconnectReason.restartRequired ? 1000 : (statusCode === 440 ? 12000 : 3500);
+        const delay = statusCode === DisconnectReason.restartRequired ? 1000 : (statusCode === 440 ? 15000 : 3500);
         console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conexão fechada (${statusCode}: ${errorMsg}). Reconectando em ${delay}ms...`);
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
@@ -1495,7 +1500,11 @@ async function disconnectWhatsApp() {
     if (sock) {
       await sock.logout().catch(() => {});
       sock.ev?.removeAllListeners();
-      sock.ws?.close();
+      if (typeof sock.end === "function") {
+        sock.end(undefined);
+      } else if (sock.ws) {
+        sock.ws.close();
+      }
       sock = null;
     }
     status = "DISCONNECTED";
@@ -1923,7 +1932,11 @@ async function gracefulShutdown(signal) {
   if (sock) {
     try {
       sock.ev?.removeAllListeners();
-      sock.ws?.close();
+      if (typeof sock.end === "function") {
+        sock.end(undefined);
+      } else if (sock.ws) {
+        sock.ws.close();
+      }
     } catch (_) {}
     sock = null;
   }
