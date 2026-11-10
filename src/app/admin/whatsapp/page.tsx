@@ -946,9 +946,18 @@ export default function WhatsAppPage() {
                               <p className="text-xs text-zinc-300 mt-1">
                                 No WhatsApp: <strong>Aparelhos Conectados ➔ Conectar Aparelho</strong>
                               </p>
-                              <p className="text-[10px] text-zinc-500 mt-1">
+                              <p className="text-[10px] text-zinc-500 mt-1 mb-2">
                                 O código atualiza automaticamente se expirar.
                               </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleIniciarConexao}
+                                loading={carregandoAcao}
+                                className="text-xs font-bold border-zinc-700 hover:border-amber-500 text-zinc-300"
+                              >
+                                🔄 Gerar Novo QR Code Agora
+                              </Button>
                             </div>
                           </div>
                         ) : statusConexao === "CONNECTING" ? (

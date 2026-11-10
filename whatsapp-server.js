@@ -198,6 +198,7 @@ async function clearPostgresSession() {
 let sock = null;
 let qrCodeBase64 = null;
 let pairingCode = null;
+let lastQrTime = null;
 let status = "DISCONNECTED"; // "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "STANDBY"
 let connectedPhone = null;
 let isStarting = false;
@@ -1244,8 +1245,8 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   return resposta;
 }
 
-async function startWhatsApp() {
-  if (status === "CONNECTED" || status === "CONNECTING" || isStarting) {
+async function startWhatsApp(force = false) {
+  if (!force && (status === "CONNECTED" || isStarting)) {
     return;
   }
 
@@ -1313,6 +1314,7 @@ async function startWhatsApp() {
         try {
           qrCodeBase64 = await QRCode.toDataURL(qr, { margin: 2, scale: 10 });
           status = "CONNECTING";
+          lastQrTime = Date.now();
           console.log(">>> [WhatsApp] QR Code real gerado para pareamento.");
         } catch (err) {
           console.error("Erro no QR:", err);
@@ -1344,12 +1346,12 @@ async function startWhatsApp() {
         // CASO A: Se ainda está no processo de pareamento pelo QR Code
         if (!isRegistered) {
           console.log(`[WhatsApp] Ciclo de pareamento renovando QR Code (${statusCode || "timeout"})...`);
-          // Mantém CONNECTING e PRESERVA qrCodeBase64 para a tela do usuário não ficar piscando "Desconectado"
+          isStarting = false;
           status = "CONNECTING";
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
             reconnectTimeout = null;
-            startWhatsApp();
+            startWhatsApp(true);
           }, 1500);
           return;
         }
@@ -1359,13 +1361,15 @@ async function startWhatsApp() {
           console.warn(">>> [WhatsApp] Sessão existente revogada no celular (401). Limpando credenciais antigas...");
           sessionCache.clear();
           await clearPostgresSession();
+          isStarting = false;
           status = "CONNECTING";
           qrCodeBase64 = null;
+          lastQrTime = null;
           connectedPhone = null;
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
             reconnectTimeout = null;
-            startWhatsApp();
+            startWhatsApp(true);
           }, 2000);
           return;
         }
@@ -1385,13 +1389,14 @@ async function startWhatsApp() {
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
           reconnectTimeout = null;
-          startWhatsApp();
+          startWhatsApp(true);
         }, delay);
       } else if (connection === "open") {
         console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conectado com sucesso com sessão persistida no PostgreSQL!`);
         status = "CONNECTED";
         qrCodeBase64 = null;
         pairingCode = null;
+        lastQrTime = null;
         connectedPhone = sock?.user?.id?.split(":")[0] || "Conectado";
       }
     });
@@ -1469,10 +1474,11 @@ async function startWhatsApp() {
   } catch (error) {
     console.error("Erro ao iniciar Baileys:", error);
     status = "DISCONNECTED";
+    isStarting = false;
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
     reconnectTimeout = setTimeout(() => {
       reconnectTimeout = null;
-      startWhatsApp();
+      startWhatsApp(true);
     }, 5000);
   } finally {
     isStarting = false;
@@ -1495,6 +1501,7 @@ async function disconnectWhatsApp() {
     status = "DISCONNECTED";
     qrCodeBase64 = null;
     pairingCode = null;
+    lastQrTime = null;
     connectedPhone = null;
     userSessions.clear();
     phoneToJidMap.clear();
@@ -1778,6 +1785,7 @@ const server = http.createServer(async (req, res) => {
         instanceId: INSTANCE_ID,
         isLeader,
         lastDisconnectInfo,
+        qrAgeSeconds: lastQrTime ? Math.round((Date.now() - lastQrTime) / 1000) : null,
         uptime: Math.round(process.uptime()),
       })
     );
@@ -1794,9 +1802,10 @@ const server = http.createServer(async (req, res) => {
         const cleanPhone = rawPhone.replace(/\D/g, "");
         const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
 
-        if (!sock) {
-          startWhatsApp();
-          await sleep(3000);
+        if (!sock || !sock.ws || sock.ws.readyState !== 1) {
+          isStarting = false;
+          await startWhatsApp(true);
+          await sleep(3500);
         }
 
         if (sock && typeof sock.requestPairingCode === "function") {
@@ -1821,7 +1830,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === "/start" && req.method === "POST") {
-    startWhatsApp();
+    isStarting = false;
+    startWhatsApp(true);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ success: true, message: "Iniciando Baileys..." }));
     return;
