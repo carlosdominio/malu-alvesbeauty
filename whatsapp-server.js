@@ -1334,7 +1334,7 @@ async function startWhatsApp(force = false) {
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
       keepAliveIntervalMs: 25000,
-      qrTimeout: 120000,
+      qrTimeout: 40000,
       generateHighQualityLinkPreview: false,
       getMessage: async () => ({
         conversation: "ok",

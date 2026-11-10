@@ -65,7 +65,7 @@ export default function WhatsAppPage() {
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [telefoneParaCodigo, setTelefoneParaCodigo] = useState("829981430673");
   const [gerandoCodigo, setGerandoCodigo] = useState(false);
-  const [metodoConexao, setMetodoConexao] = useState<"CODIGO" | "QR">("CODIGO");
+  const [metodoConexao, setMetodoConexao] = useState<"CODIGO" | "QR">("QR");
   const [telefoneConectado, setTelefoneConectado] = useState<string | null>(null);
   const [carregandoAcao, setCarregandoAcao] = useState(false);
 
