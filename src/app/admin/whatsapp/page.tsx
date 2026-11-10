@@ -153,8 +153,14 @@ export default function WhatsAppPage() {
       if (res && res.ok) {
         const data = await res.json();
         setStatusConexao(data.status);
-        setQrCodeBase64(data.qrCodeBase64);
-        setTelefoneConectado(data.connectedPhone);
+        if (data.qrCodeBase64) {
+          setQrCodeBase64(data.qrCodeBase64);
+        }
+        if (data.status === "CONNECTED") {
+          setTelefoneConectado(data.connectedPhone);
+        } else {
+          setTelefoneConectado(null);
+        }
       }
     } catch (e) {
       console.error("Erro ao verificar status do WhatsApp:", e);
@@ -731,11 +737,13 @@ export default function WhatsAppPage() {
                   <div>
                     <h4 className="text-sm font-bold text-zinc-100">Status do WhatsApp</h4>
                     <p className="text-xs text-zinc-400 font-mono">
-                      {telefoneConectado
+                      {statusConexao === "CONNECTED" && telefoneConectado
                         ? formatarTelefone(telefoneConectado)
+                        : statusConexao === "CONNECTING" && qrCodeBase64
+                        ? "Aguardando leitura do QR Code"
                         : statusConexao === "CONNECTING" && !qrCodeBase64
-                        ? "Restabelecendo..."
-                        : "Aguardando pareamento"}
+                        ? "Iniciando Baileys..."
+                        : "Desconectado"}
                     </p>
                   </div>
                 </div>
@@ -755,7 +763,7 @@ export default function WhatsAppPage() {
                 {statusConexao === "CONNECTING" && !qrCodeBase64 && (
                   <Badge variant="warning" className="flex items-center gap-1 bg-amber-500/10 border-amber-500/30 text-amber-300">
                     <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-                    Reconectando Sessão...
+                    Iniciando...
                   </Badge>
                 )}
                 {statusConexao === "DISCONNECTED" && (

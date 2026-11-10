@@ -1183,9 +1183,11 @@ async function startWhatsApp(force = false) {
   }
 
   try {
-    const hasAuthInDb = await restoreAuthFromDb();
-    if (!hasAuthInDb) {
-      clearLocalAuth();
+    // 1. Se a pasta local já tem creds.json (ex: pareamento em andamento ou pós-515), preserva!
+    // Só restaura do banco de dados se a pasta local estiver vazia (ex: novo container do Render)
+    const localCredsPath = path.join(authDir, "creds.json");
+    if (!fs.existsSync(localCredsPath)) {
+      await restoreAuthFromDb();
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -1205,7 +1207,7 @@ async function startWhatsApp(force = false) {
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
       keepAliveIntervalMs: 25000,
-      qrTimeout: 40000,
+      qrTimeout: 60000,
       generateHighQualityLinkPreview: false,
       getMessage: async () => ({
         conversation: "ok",
@@ -1258,26 +1260,33 @@ async function startWhatsApp(force = false) {
 
         isStarting = false;
 
-        // CASO 1: 515 (restartRequired) -> QR Code escaneado com sucesso!
+        // CASO 1: 515 (restartRequired) -> QR Code escaneado com sucesso pelo celular!
         if (statusCode === DisconnectReason.restartRequired || statusCode === 515) {
-          console.log(`>>> [WhatsApp][${INSTANCE_ID}] QR Code escaneado com sucesso! Reiniciando socket autenticado (515)...`);
+          console.log(`>>> [WhatsApp][${INSTANCE_ID}] QR Code escaneado com sucesso! Salvando credenciais e reiniciando socket autenticado (515)...`);
+          await saveCreds().catch(() => {});
+          if (state.creds?.me?.id) {
+            await syncAuthToDb().catch(() => {});
+          }
           status = "CONNECTING";
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
             reconnectTimeout = null;
             startWhatsApp();
-          }, 1500);
+          }, 1000);
           return;
         }
 
         // CASO 2: 401 (loggedOut) -> Sessão desconectada
         if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-          console.warn(">>> [WhatsApp] Sessão encerrada ou 401. Limpando credenciais para novo QR Code...");
-          clearLocalAuth();
-          await clearDbAuth();
+          const jaEstavaConectado = Boolean(state.creds?.me?.id);
+          if (jaEstavaConectado) {
+            console.warn(">>> [WhatsApp] Sessão encerrada no celular (401 LoggedOut). Limpando dados para novo QR Code...");
+            clearLocalAuth();
+            await clearDbAuth();
+            qrCodeBase64 = null;
+            connectedPhone = null;
+          }
           status = "CONNECTING";
-          qrCodeBase64 = null;
-          connectedPhone = null;
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
             reconnectTimeout = null;
@@ -1298,13 +1307,14 @@ async function startWhatsApp(force = false) {
           return;
         }
 
-        // CASO 4: 428 / 408 / Outros
-        console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conexão fechada (${statusCode}: ${errorMsg}). Reconectando em 3s...`);
+        // CASO 4: 428 / 408 / Timeout de QR / Queda de rede
+        // MANTÉM o qrCodeBase64 em memória para NÃO PISCAR a tela do usuário!
+        console.log(`>>> [WhatsApp][${INSTANCE_ID}] Rotação de conexão (${statusCode}: ${errorMsg}). Renovando...`);
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
           reconnectTimeout = null;
           startWhatsApp();
-        }, 3000);
+        }, 1500);
       } else if (connection === "open") {
         console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conectado com sucesso!`);
         status = "CONNECTED";
