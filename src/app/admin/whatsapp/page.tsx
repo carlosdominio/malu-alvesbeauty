@@ -58,6 +58,7 @@ export default function WhatsAppPage() {
 
   // Estados Reais da Conexão Baileys
   const [statusConexao, setStatusConexao] = useState<"DISCONNECTED" | "CONNECTING" | "CONNECTED">("DISCONNECTED");
+  const [carregandoStatusInicial, setCarregandoStatusInicial] = useState(true);
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
   const [telefoneConectado, setTelefoneConectado] = useState<string | null>(null);
   const [carregandoAcao, setCarregandoAcao] = useState(false);
@@ -146,9 +147,10 @@ export default function WhatsAppPage() {
 
   const checarStatusWhatsApp = useCallback(async () => {
     try {
-      let res = await fetch(`${getBotEndpoint()}/status`, { cache: "no-store" }).catch(() => null);
+      // 1. Tenta a rota interna mesma-origem (0ms preflight, sem bloqueio de CORS)
+      let res = await fetch("/api/whatsapp", { cache: "no-store" }).catch(() => null);
       if (!res || !res.ok) {
-        res = await fetch("/api/whatsapp", { cache: "no-store" }).catch(() => null);
+        res = await fetch(`${getBotEndpoint()}/status`, { cache: "no-store" }).catch(() => null);
       }
       if (res && res.ok) {
         const data = await res.json();
@@ -164,6 +166,8 @@ export default function WhatsAppPage() {
       }
     } catch (e) {
       console.error("Erro ao verificar status do WhatsApp:", e);
+    } finally {
+      setCarregandoStatusInicial(false);
     }
   }, []);
 
@@ -737,7 +741,9 @@ export default function WhatsAppPage() {
                   <div>
                     <h4 className="text-sm font-bold text-zinc-100">Status do WhatsApp</h4>
                     <p className="text-xs text-zinc-400 font-mono">
-                      {statusConexao === "CONNECTED" && telefoneConectado
+                      {carregandoStatusInicial
+                        ? "Verificando conexão..."
+                        : statusConexao === "CONNECTED" && telefoneConectado
                         ? formatarTelefone(telefoneConectado)
                         : statusConexao === "CONNECTING" && qrCodeBase64
                         ? "Aguardando leitura do QR Code"
@@ -748,32 +754,46 @@ export default function WhatsAppPage() {
                   </div>
                 </div>
 
-                {statusConexao === "CONNECTED" && (
+                {carregandoStatusInicial && (
+                  <Badge variant="warning" className="flex items-center gap-1 bg-zinc-800 border-zinc-700 text-zinc-300">
+                    <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                    Sincronizando...
+                  </Badge>
+                )}
+                {!carregandoStatusInicial && statusConexao === "CONNECTED" && (
                   <Badge variant="success" className="flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     Conectado
                   </Badge>
                 )}
-                {statusConexao === "CONNECTING" && qrCodeBase64 && (
+                {!carregandoStatusInicial && statusConexao === "CONNECTING" && qrCodeBase64 && (
                   <Badge variant="warning" className="flex items-center gap-1">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Aguardando Leitura
                   </Badge>
                 )}
-                {statusConexao === "CONNECTING" && !qrCodeBase64 && (
+                {!carregandoStatusInicial && statusConexao === "CONNECTING" && !qrCodeBase64 && (
                   <Badge variant="warning" className="flex items-center gap-1 bg-amber-500/10 border-amber-500/30 text-amber-300">
                     <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
                     Iniciando...
                   </Badge>
                 )}
-                {statusConexao === "DISCONNECTED" && (
+                {!carregandoStatusInicial && statusConexao === "DISCONNECTED" && (
                   <Badge variant="danger">Desconectado</Badge>
                 )}
               </div>
 
               {/* Conteúdo do Card: Conexão Exclusiva via QR Code */}
               <div className="pt-4 space-y-3">
-                {statusConexao === "CONNECTED" ? (
+                {carregandoStatusInicial ? (
+                  <div className="text-center p-8 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    </div>
+                    <h5 className="text-sm font-bold text-zinc-200">Sincronizando com o WhatsApp...</h5>
+                    <p className="text-xs text-zinc-400">Verificando status da conexão em tempo real...</p>
+                  </div>
+                ) : statusConexao === "CONNECTED" ? (
                   <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 text-center space-y-2">
                     <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
                       <CheckCircle2 className="w-6 h-6" />

@@ -185,33 +185,35 @@ let leaderHeartbeatInterval = null;
 async function checkAndAcquireLeader() {
   if (!pgPool) return true;
   try {
-    const res = await pgPool.query("SELECT value, updated_at FROM zap_session WHERE id = 'bot_active_leader'");
     const now = Date.now();
+
+    // Tenta adquirir liderança com UPDATE atômico:
+    // Só sobrescreve se o registro NÃO existe OU o heartbeat está morto (> 12s sem atualizar)
+    const res = await pgPool.query(`
+      INSERT INTO zap_session (id, value, updated_at)
+        VALUES ('bot_active_leader', $1, NOW())
+        ON CONFLICT (id) DO UPDATE
+          SET value = $1, updated_at = NOW()
+          WHERE (
+            zap_session.value::json->>'instanceId' = $2
+            OR NOW() - zap_session.updated_at > INTERVAL '12 seconds'
+          )
+      RETURNING id
+    `, [JSON.stringify({ instanceId: INSTANCE_ID, updatedAt: now }), INSTANCE_ID]);
+
     if (res.rows.length > 0) {
-      try {
-        const leader = JSON.parse(res.rows[0].value);
-        if (leader.instanceId === INSTANCE_ID) {
-          isLeader = true;
-          startLeaderHeartbeat();
-          return true;
-        }
-        const leaderAge = now - (new Date(res.rows[0].updated_at).getTime() || leader.updatedAt || 0);
-        if (leaderAge < 8000) {
-          isLeader = false;
-          return false;
-        }
-      } catch (_) {}
+      // Conseguiu: somos o líder
+      isLeader = true;
+      startLeaderHeartbeat();
+      return true;
     }
-    const payload = JSON.stringify({ instanceId: INSTANCE_ID, updatedAt: now });
-    await pgPool.query(
-      "INSERT INTO zap_session (id, value, updated_at) VALUES ('bot_active_leader', $1, NOW()) ON CONFLICT (id) DO UPDATE SET value = $1, updated_at = NOW()",
-      [payload]
-    );
-    isLeader = true;
-    startLeaderHeartbeat();
-    return true;
+
+    // Outro líder está vivo
+    isLeader = false;
+    return false;
   } catch (err) {
     console.error("Erro ao verificar liderança:", err.message);
+    // Em caso de erro de DB, permite subir para não travar
     return true;
   }
 }
