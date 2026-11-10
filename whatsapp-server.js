@@ -301,6 +301,14 @@ async function atualizarConfigRemoto() {
 atualizarConfigRemoto();
 setInterval(atualizarConfigRemoto, 30 * 1000);
 
+// Auto-ping a cada 4 minutos para impedir que o container do Render hiberne por inatividade
+const RENDER_HEALTH_URL = process.env.RENDER_EXTERNAL_URL || "https://malu-alvesbeauty.onrender.com";
+setInterval(async () => {
+  try {
+    await fetch(`${RENDER_HEALTH_URL}/health`).catch(() => {});
+  } catch (_) {}
+}, 4 * 60 * 1000);
+
 function lerBancoCentral() {
   let data = { servicos: [], agendamentos: [], clientes: [], config: {} };
   try {
