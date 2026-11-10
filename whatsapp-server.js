@@ -161,13 +161,21 @@ async function usePostgresAuthState() {
           for (const id in data[category]) {
             const fullKey = `${category}-${id}`;
             const value = data[category][id];
-            sessionCache.set(fullKey, value);
-            tasks.push(
-              value ? writeData(fullKey, value) : removeData(fullKey)
-            );
+            if (value) {
+              sessionCache.set(fullKey, value);
+              tasks.push(writeData(fullKey, value));
+            } else {
+              sessionCache.delete(fullKey);
+              tasks.push(removeData(fullKey));
+            }
           }
         }
-        await Promise.all(tasks);
+        // Persistência assíncrona desacoplada em background:
+        // Mantém as chaves imediatamente no cache de memória RAM para criptografia instantânea
+        // e grava no PostgreSQL em segundo plano sem travar o envio de mensagens do robô.
+        Promise.all(tasks).catch((err) => {
+          console.error("Erro assíncrono ao persistir chaves no PostgreSQL:", err.message);
+        });
       },
     },
   };
@@ -785,12 +793,10 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   const ehComprovante =
     ehMidia ||
     textoLimpo.includes("comprovante") ||
-    textoLimpo.includes("pago") ||
-    textoLimpo.includes("pagamento") ||
-    textoLimpo.includes("pix") ||
-    textoLimpo.includes("enviei") ||
-    textoLimpo.includes("transferi") ||
-    textoLimpo.includes("mandei");
+    textoLimpo.includes("segue o comprovante") ||
+    textoLimpo.includes("foto do comprovante") ||
+    ((textoLimpo.includes("enviei") || textoLimpo.includes("mandei") || textoLimpo.includes("transferi") || textoLimpo.includes("fiz o pix")) &&
+      (textoLimpo.includes("pix") || textoLimpo.includes("sinal") || textoLimpo.includes("comprovante") || textoLimpo.includes("valor")));
 
   if (session.step === "AGUARDANDO_COMPROVANTE" || ehComprovante) {
     const agAprovado = await aprovarComprovanteCliente(telefoneFinal);
@@ -1244,7 +1250,12 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
 }
 
 async function startWhatsApp(force = false) {
-  if (!force && (status === "CONNECTED" || isStarting)) {
+  if (status === "CONNECTED") {
+    console.log(`[WhatsApp][${INSTANCE_ID}] Já está CONNECTED. Mantendo conexão ativa.`);
+    return;
+  }
+
+  if (!force && isStarting) {
     return;
   }
 
@@ -1282,6 +1293,8 @@ async function startWhatsApp(force = false) {
       }
     } catch (_) {}
     sock = null;
+    // Aguarda encerramento do socket TCP/WS anterior para prevenir Erro 440 (conflict)
+    await sleep(1000);
   }
 
   try {
@@ -1294,12 +1307,12 @@ async function startWhatsApp(force = false) {
       auth: state,
       logger,
       printQRInTerminal: false,
-      browser: Browsers.macOS("Desktop"),
+      browser: Browsers.ubuntu("Chrome"),
       syncFullHistory: false,
       markOnlineOnConnect: false,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 10000,
+      keepAliveIntervalMs: 25000,
       qrTimeout: 120000,
       generateHighQualityLinkPreview: false,
       getMessage: async () => ({
@@ -1326,6 +1339,7 @@ async function startWhatsApp(force = false) {
       if (connection === "close") {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const errorMsg = lastDisconnect?.error?.message || String(lastDisconnect?.error || "");
+        const userJid = sock?.user?.id;
 
         lastDisconnectInfo = {
           statusCode: statusCode || null,
@@ -1347,7 +1361,7 @@ async function startWhatsApp(force = false) {
         }
 
         // Verifica se a sessão já está pareada/registrada
-        const isRegistered = Boolean(state?.creds?.registered && (state?.creds?.me?.id || sock?.user?.id));
+        const isRegistered = Boolean(state?.creds?.registered || state?.creds?.me?.id || userJid);
 
         // CASO A: Se ainda está no processo de pareamento pelo QR Code
         if (!isRegistered) {
@@ -1380,22 +1394,43 @@ async function startWhatsApp(force = false) {
           return;
         }
 
-        // CASO C: Conflito 440 (duas instâncias conectadas ao mesmo tempo)
-        if (statusCode === 440) {
-          console.warn(`>>> [WhatsApp][${INSTANCE_ID}] Conflito 440 detectado. Aguardando 15s para a outra conexão encerrar...`);
+        // CASO C: Reinicialização solicitada pelo WhatsApp (515 restartRequired) - NORMAL após pareamento
+        if (statusCode === DisconnectReason.restartRequired) {
+          console.log(`>>> [WhatsApp][${INSTANCE_ID}] Handshake concluído (515 restartRequired). Reconectando sessão autenticada em 3.5s...`);
+          isStarting = false;
+          status = "CONNECTING";
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            startWhatsApp(true);
+          }, 3500);
+          return;
         }
 
-        // CASO D: Queda normal de rede ou restart
+        // CASO D: Conflito 440 (duas instâncias conectadas ao mesmo tempo)
+        if (statusCode === 440) {
+          console.warn(`>>> [WhatsApp][${INSTANCE_ID}] Conflito 440 detectado. Aguardando 15s para a outra conexão encerrar totalmente...`);
+          isStarting = false;
+          status = "DISCONNECTED";
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            startWhatsApp(true);
+          }, 15000);
+          return;
+        }
+
+        // CASO E: Queda temporária de rede ou proxy
+        isStarting = false;
         status = "DISCONNECTED";
         qrCodeBase64 = null;
         connectedPhone = null;
-        const delay = statusCode === DisconnectReason.restartRequired ? 1000 : (statusCode === 440 ? 15000 : 3500);
-        console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conexão fechada (${statusCode}: ${errorMsg}). Reconectando em ${delay}ms...`);
+        console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conexão fechada (${statusCode}: ${errorMsg}). Reconectando em 4s...`);
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
           reconnectTimeout = null;
           startWhatsApp(true);
-        }, delay);
+        }, 4000);
       } else if (connection === "open") {
         console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conectado com sucesso com sessão persistida no PostgreSQL!`);
         status = "CONNECTED";
@@ -1403,6 +1438,10 @@ async function startWhatsApp(force = false) {
         pairingCode = null;
         lastQrTime = null;
         connectedPhone = sock?.user?.id?.split(":")[0] || "Conectado";
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
       }
     });
 
@@ -1811,6 +1850,12 @@ const server = http.createServer(async (req, res) => {
         const cleanPhone = rawPhone.replace(/\D/g, "");
         const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
 
+        if (status === "CONNECTED") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: true, message: "WhatsApp já está conectado com sucesso!", connectedPhone }));
+          return;
+        }
+
         if (!sock || !sock.ws || sock.ws.readyState !== 1) {
           isStarting = false;
           await startWhatsApp(true);
@@ -1839,7 +1884,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === "/start" && req.method === "POST") {
-    isStarting = false;
+    if (status === "CONNECTED") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, message: "WhatsApp já está conectado com sucesso!", status, connectedPhone }));
+      return;
+    }
+    if (isStarting) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, message: "WhatsApp já está iniciando...", status }));
+      return;
+    }
     startWhatsApp(true);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ success: true, message: "Iniciando Baileys..." }));
