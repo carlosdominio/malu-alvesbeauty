@@ -105,6 +105,7 @@ async function usePostgresAuthState() {
     console.log("ℹ️ [Auth] Nenhuma credencial existente em zap_session. Inicializando novas credenciais.");
     credsData = initAuthCreds();
     sessionCache.set("creds", credsData);
+    await writeData("creds", credsData);
   }
 
   const state = {
@@ -187,7 +188,7 @@ async function clearPostgresSession() {
   sessionCache.clear();
   if (!pgPool) return;
   try {
-    await pgPool.query("DELETE FROM zap_session");
+    await pgPool.query("DELETE FROM zap_session WHERE id != 'bot_active_leader'");
     console.log("🗑️ [PostgreSQL] Sessão do WhatsApp apagada do banco.");
   } catch (e) {
     console.error("❌ Erro ao apagar sessão no PostgreSQL:", e.message);
@@ -196,6 +197,7 @@ async function clearPostgresSession() {
 
 let sock = null;
 let qrCodeBase64 = null;
+let pairingCode = null;
 let status = "DISCONNECTED"; // "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "STANDBY"
 let connectedPhone = null;
 let isStarting = false;
@@ -1289,7 +1291,7 @@ async function startWhatsApp() {
       auth: state,
       logger,
       printQRInTerminal: false,
-      browser: Browsers.ubuntu("Chrome"),
+      browser: Browsers.macOS("Desktop"),
       syncFullHistory: false,
       markOnlineOnConnect: false,
       connectTimeoutMs: 60000,
@@ -1309,7 +1311,7 @@ async function startWhatsApp() {
 
       if (qr) {
         try {
-          qrCodeBase64 = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
+          qrCodeBase64 = await QRCode.toDataURL(qr, { margin: 2, scale: 10 });
           status = "CONNECTING";
           console.log(">>> [WhatsApp] QR Code real gerado para pareamento.");
         } catch (err) {
@@ -1389,6 +1391,7 @@ async function startWhatsApp() {
         console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conectado com sucesso com sessão persistida no PostgreSQL!`);
         status = "CONNECTED";
         qrCodeBase64 = null;
+        pairingCode = null;
         connectedPhone = sock?.user?.id?.split(":")[0] || "Conectado";
       }
     });
@@ -1491,6 +1494,7 @@ async function disconnectWhatsApp() {
     }
     status = "DISCONNECTED";
     qrCodeBase64 = null;
+    pairingCode = null;
     connectedPhone = null;
     userSessions.clear();
     phoneToJidMap.clear();
@@ -1769,6 +1773,7 @@ const server = http.createServer(async (req, res) => {
       JSON.stringify({
         status,
         qrCodeBase64,
+        pairingCode,
         connectedPhone,
         instanceId: INSTANCE_ID,
         isLeader,
@@ -1776,6 +1781,42 @@ const server = http.createServer(async (req, res) => {
         uptime: Math.round(process.uptime()),
       })
     );
+    return;
+  }
+
+  if (req.url === "/pairing-code" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", async () => {
+      try {
+        const payload = JSON.parse(body || "{}");
+        const rawPhone = payload.phone || "829981430673";
+        const cleanPhone = rawPhone.replace(/\D/g, "");
+        const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+
+        if (!sock) {
+          startWhatsApp();
+          await sleep(3000);
+        }
+
+        if (sock && typeof sock.requestPairingCode === "function") {
+          pairingCode = await sock.requestPairingCode(formattedPhone);
+          console.log(`>>> [WhatsApp] Pairing Code gerado para ${formattedPhone}: ${pairingCode}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: true, pairingCode, phone: formattedPhone }));
+          return;
+        } else {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Serviço WhatsApp não está pronto. Tente novamente em alguns segundos." }));
+          return;
+        }
+      } catch (err) {
+        console.error("Erro ao gerar pairing code:", err);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+        return;
+      }
+    });
     return;
   }
 

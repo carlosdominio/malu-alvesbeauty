@@ -21,6 +21,9 @@ import {
   Save,
   HelpCircle,
   FileText,
+  KeyRound,
+  Copy,
+  Smartphone,
 } from "lucide-react";
 import { Servico, ExpedienteDia, HorarioSlot, BarbeariaConfig, RespostaAutomatica } from "@/types";
 import { DataStore } from "@/lib/dataStore";
@@ -59,6 +62,10 @@ export default function WhatsAppPage() {
   // Estados Reais da Conexão Baileys
   const [statusConexao, setStatusConexao] = useState<"DISCONNECTED" | "CONNECTING" | "CONNECTED">("DISCONNECTED");
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [telefoneParaCodigo, setTelefoneParaCodigo] = useState("829981430673");
+  const [gerandoCodigo, setGerandoCodigo] = useState(false);
+  const [metodoConexao, setMetodoConexao] = useState<"CODIGO" | "QR">("CODIGO");
   const [telefoneConectado, setTelefoneConectado] = useState<string | null>(null);
   const [carregandoAcao, setCarregandoAcao] = useState(false);
 
@@ -120,6 +127,9 @@ export default function WhatsAppPage() {
       setServicos(srvs.filter((s) => s.ativo));
       setExpediente(exp);
       setConfig(cfg);
+      if (cfg.telefone_whatsapp) {
+        setTelefoneParaCodigo(cfg.telefone_whatsapp);
+      }
 
       // Inicializa os textos dos templates a partir do config ou padrão
       const zapCfg = cfg.mensagens_zap;
@@ -154,12 +164,52 @@ export default function WhatsAppPage() {
         const data = await res.json();
         setStatusConexao(data.status);
         setQrCodeBase64(data.qrCodeBase64);
+        if (data.pairingCode) {
+          setPairingCode(data.pairingCode);
+        }
         setTelefoneConectado(data.connectedPhone);
       }
     } catch (e) {
       console.error("Erro ao verificar status do WhatsApp:", e);
     }
   }, []);
+
+  // Gerar Código de Pareamento de 8 Dígitos (Link with phone number - Sem Câmera)
+  const handleGerarCodigoPairing = async () => {
+    setGerandoCodigo(true);
+    try {
+      let res = await fetch(`${getBotEndpoint()}/pairing-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: telefoneParaCodigo }),
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        res = await fetch("/api/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "PAIRING_CODE", phone: telefoneParaCodigo }),
+        });
+      }
+
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data.pairingCode) {
+          setPairingCode(data.pairingCode);
+          toastSuccess("Código de Conexão Gerado! 🔢", `Código: ${data.pairingCode}. Digite no seu WhatsApp!`);
+        } else {
+          toastWarning("Aviso", data.error || "Não foi possível gerar o código.");
+        }
+      } else {
+        toastWarning("Aviso", "Erro ao comunicar com o servidor WhatsApp.");
+      }
+    } catch (err) {
+      console.error(err);
+      toastWarning("Erro", "Falha ao solicitar código de pareamento.");
+    } finally {
+      setGerandoCodigo(false);
+    }
+  };
 
   useEffect(() => {
     checarStatusWhatsApp();
@@ -763,8 +813,8 @@ export default function WhatsAppPage() {
                 )}
               </div>
 
-              {/* Conteúdo do Card: QR Code REAL gerado pelo Baileys */}
-              <div className="pt-4">
+              {/* Conteúdo do Card: QR Code REAL gerado pelo Baileys ou Código de Pareamento */}
+              <div className="pt-4 space-y-3">
                 {statusConexao === "CONNECTED" ? (
                   <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 text-center space-y-2">
                     <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
@@ -775,59 +825,169 @@ export default function WhatsAppPage() {
                       Seu robô está respondendo às clientes automaticamente no número pareado. Sessão salva com persistência no banco de dados.
                     </p>
                   </div>
-                ) : qrCodeBase64 ? (
-                  <div className="text-center p-4 bg-zinc-950 border-2 border-amber-500/40 rounded-2xl space-y-3 shadow-xl">
-                    <div className="bg-white p-3 rounded-2xl inline-block mx-auto shadow-2xl">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={qrCodeBase64}
-                        alt="QR Code Real do WhatsApp"
-                        className="w-48 h-48 block mx-auto"
-                      />
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-black text-amber-400">Aponte a câmera do WhatsApp agora</h5>
-                      <p className="text-xs text-zinc-300 mt-1">
-                        No WhatsApp: <strong>Aparelhos Conectados ➔ Conectar Aparelho</strong>
-                      </p>
-                      <p className="text-[10px] text-zinc-500 mt-1">
-                        O código atualiza automaticamente se expirar.
-                      </p>
-                    </div>
-                  </div>
-                ) : statusConexao === "CONNECTING" ? (
-                  <div className="text-center p-6 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
-                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-bold text-zinc-200">Restabelecendo conexão...</h5>
-                      <p className="text-xs text-zinc-400 mt-1">
-                        Carregando credenciais salvas no banco de dados e conectando ao WhatsApp...
-                      </p>
-                    </div>
-                  </div>
                 ) : (
-                  <div className="text-center p-6 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
-                    <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-zinc-400">
-                      <Power className="w-6 h-6" />
+                  <>
+                    {/* Seleção do Método de Conexão */}
+                    <div className="flex items-center gap-1.5 p-1 bg-zinc-900 border border-zinc-800 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setMetodoConexao("CODIGO")}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all",
+                          metodoConexao === "CODIGO"
+                            ? "bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/20"
+                            : "text-zinc-400 hover:text-white"
+                        )}
+                      >
+                        <Smartphone className="w-3.5 h-3.5" />
+                        <span>Código 8 Dígitos (Sem Câmera)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMetodoConexao("QR")}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all",
+                          metodoConexao === "QR"
+                            ? "bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/20"
+                            : "text-zinc-400 hover:text-white"
+                        )}
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                        <span>QR Code Grande</span>
+                      </button>
                     </div>
-                    <div>
-                      <h5 className="text-sm font-bold text-zinc-200">WhatsApp Desconectado</h5>
-                      <p className="text-xs text-zinc-400 mt-1">
-                        Clique no botão abaixo para gerar o QR Code oficial e conectar seu aparelho.
-                      </p>
-                    </div>
-                    <Button
-                      variant="gold"
-                      size="md"
-                      onClick={handleIniciarConexao}
-                      loading={carregandoAcao}
-                      className="w-full font-bold text-xs"
-                    >
-                      Gerar QR Code Agora
-                    </Button>
-                  </div>
+
+                    {/* MODO 1: CÓDIGO DE PAREAMENTO (Sem Câmera / Mais Fácil) */}
+                    {metodoConexao === "CODIGO" && (
+                      <div className="p-4 bg-zinc-950 border border-amber-500/30 rounded-2xl space-y-4">
+                        <div className="text-center space-y-1">
+                          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                            <KeyRound className="w-5 h-5" />
+                          </div>
+                          <h5 className="text-sm font-black text-amber-400">Conectar por Código Oficial</h5>
+                          <p className="text-xs text-zinc-400">
+                            Não precisa usar a câmera! Digite o número do WhatsApp do Studio e receba o código de 8 dígitos para digitar no celular.
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[11px] font-bold text-zinc-300">
+                            Número do WhatsApp do Studio (com DDD):
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={telefoneParaCodigo}
+                              onChange={(e) => setTelefoneParaCodigo(e.target.value)}
+                              placeholder="Ex: 829981430673"
+                              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-100 font-mono focus:border-amber-500 focus:outline-none"
+                            />
+                            <Button
+                              variant="gold"
+                              size="sm"
+                              onClick={handleGerarCodigoPairing}
+                              loading={gerandoCodigo}
+                              className="font-bold text-xs"
+                            >
+                              Gerar Código
+                            </Button>
+                          </div>
+                        </div>
+
+                        {pairingCode && (
+                          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center space-y-3 animate-in fade-in zoom-in-95">
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                              Seu Código de Pareamento:
+                            </p>
+                            <div className="flex items-center justify-center gap-3">
+                              <span className="font-mono text-3xl font-black text-amber-400 tracking-widest bg-zinc-900 px-4 py-2 rounded-xl border border-amber-500/40 select-all">
+                                {pairingCode}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(pairingCode.replace(/-/g, ""));
+                                  toastSuccess("Copiado!", "Código copiado para a área de transferência.");
+                                }}
+                                className="h-10 text-xs text-zinc-300 hover:text-white"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                            </div>
+
+                            <div className="text-left text-xs text-zinc-300 space-y-1.5 pt-2 border-t border-amber-500/20">
+                              <p className="font-bold text-amber-400">📱 Como colocar no celular:</p>
+                              <p>1. Abra o WhatsApp no celular e vá em <strong>Aparelhos Conectados</strong>.</p>
+                              <p>2. Toque em <strong>Conectar Aparelho</strong>.</p>
+                              <p>3. No rodapé da tela, toque em <strong>&quot;Conectar com número de telefone&quot;</strong>.</p>
+                              <p>4. Digite o código <strong>{pairingCode}</strong> acima. Pronto!</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* MODO 2: QR CODE GIGANTE COM ALTA DEFINIÇÃO */}
+                    {metodoConexao === "QR" && (
+                      <div>
+                        {qrCodeBase64 ? (
+                          <div className="text-center p-4 bg-zinc-950 border-2 border-amber-500/40 rounded-2xl space-y-3 shadow-xl">
+                            <div className="bg-white p-3 rounded-2xl inline-block mx-auto shadow-2xl">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={qrCodeBase64}
+                                alt="QR Code Real do WhatsApp"
+                                className="w-64 h-64 sm:w-72 sm:h-72 block mx-auto image-rendering-pixelated"
+                              />
+                            </div>
+                            <div>
+                              <h5 className="text-sm font-black text-amber-400">Aponte a câmera do WhatsApp agora</h5>
+                              <p className="text-xs text-zinc-300 mt-1">
+                                No WhatsApp: <strong>Aparelhos Conectados ➔ Conectar Aparelho</strong>
+                              </p>
+                              <p className="text-[10px] text-zinc-500 mt-1">
+                                O código atualiza automaticamente se expirar.
+                              </p>
+                            </div>
+                          </div>
+                        ) : statusConexao === "CONNECTING" ? (
+                          <div className="text-center p-6 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
+                              <Loader2 className="w-6 h-6 animate-spin" />
+                            </div>
+                            <div>
+                              <h5 className="text-sm font-bold text-zinc-200">Gerando QR Code...</h5>
+                              <p className="text-xs text-zinc-400 mt-1">
+                                Conectando aos servidores do WhatsApp para obter novo QR Code...
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center p-6 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
+                            <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-zinc-400">
+                              <Power className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h5 className="text-sm font-bold text-zinc-200">WhatsApp Desconectado</h5>
+                              <p className="text-xs text-zinc-400 mt-1">
+                                Clique no botão abaixo para gerar o QR Code oficial e conectar seu aparelho.
+                              </p>
+                            </div>
+                            <Button
+                              variant="gold"
+                              size="md"
+                              onClick={handleIniciarConexao}
+                              loading={carregandoAcao}
+                              className="w-full font-bold text-xs"
+                            >
+                              Gerar QR Code Agora
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </Card>

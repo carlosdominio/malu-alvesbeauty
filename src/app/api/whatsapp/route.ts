@@ -23,6 +23,18 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
+    if (body.action === "PAIRING_CODE") {
+      const res = await fetch(`${WHATSAPP_SERVER_URL}/pairing-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: body.phone }),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      return NextResponse.json(data, { status: res.status });
+    }
+
     const endpoint = body.action === "START" ? "start" : "disconnect";
 
     const res = await fetch(`${WHATSAPP_SERVER_URL}/${endpoint}`, {
