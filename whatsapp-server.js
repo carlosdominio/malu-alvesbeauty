@@ -3,9 +3,6 @@ const makeWASocket = require("@whiskeysockets/baileys").default;
 const {
   DisconnectReason,
   useMultiFileAuthState,
-  BufferJSON,
-  initAuthCreds,
-  proto,
   Browsers,
   fetchLatestBaileysVersion,
   fetchLatestWaWebVersion,
@@ -20,7 +17,7 @@ const PORT = 3001;
 const authDir = path.join(__dirname, "auth_info_baileys");
 const dbPath = path.join(__dirname, "data_storage.json");
 
-// Conexão com o banco PostgreSQL persistente para evitar perda de pareamento no Render
+// Conexão com o banco PostgreSQL persistente (Supabase)
 const DATABASE_URL =
   process.env.DATABASE_URL ||
   "postgresql://postgres.lsgewrzvdviqthzegowv:aEB4_2Fgg!k5EZC@aws-1-sa-east-1.pooler.supabase.com:6543/postgres";
@@ -30,27 +27,20 @@ try {
   pgPool = new Pool({
     connectionString: DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    max: 10,
+    max: 5,
     idleTimeoutMillis: 30000,
   });
   pgPool.on("error", (err) => {
-    console.error(">>> [PostgreSQL] Erro inesperado no cliente de conexão:", err.message);
+    console.error(">>> [PostgreSQL] Erro no pool de conexão:", err.message);
   });
-  console.log(">>> [PostgreSQL] Pool de conexão inicializado para sessões WhatsApp.");
+  console.log(">>> [PostgreSQL] Pool de conexão inicializado.");
 } catch (e) {
   console.error("Erro ao inicializar Pool PostgreSQL:", e.message);
 }
 
-// Cache em memória para evitar gargalo de latência e timeouts em queries de chaves
-const sessionCache = new Map();
-
-// Adaptador de autenticação Baileys no PostgreSQL com Cache em RAM
-async function usePostgresAuthState() {
-  if (!pgPool) {
-    console.log("⚠️ [Auth] PostgreSQL indisponível. Usando auth_info_baileys local.");
-    return useMultiFileAuthState(authDir);
-  }
-
+// Inicializar tabela de sessão no banco
+async function inicializarTabelaBanco() {
+  if (!pgPool) return;
   try {
     await pgPool.query(`
       CREATE TABLE IF NOT EXISTS zap_session (
@@ -62,182 +52,132 @@ async function usePostgresAuthState() {
   } catch (err) {
     console.error("Erro ao verificar/criar tabela zap_session:", err.message);
   }
+}
+inicializarTabelaBanco();
 
-  const readData = async (id) => {
-    if (sessionCache.has(id)) {
-      return sessionCache.get(id);
-    }
+// =========================================================================
+// SINCRONIZAÇÃO DE SESSÃO COM SUPABASE
+// =========================================================================
+
+// Restaurar sessão do banco de dados na inicialização
+async function restoreAuthFromDb() {
+  if (!pgPool) return false;
+  try {
+    const credsRes = await pgPool.query(
+      "SELECT value FROM zap_session WHERE id = 'creds.json' OR id = 'creds'"
+    );
+    if (credsRes.rows.length === 0) return false;
+
+    let credsObj = null;
     try {
-      const res = await pgPool.query("SELECT value FROM zap_session WHERE id = $1", [id]);
-      if (res.rows.length === 0) return null;
-      const parsed = JSON.parse(res.rows[0].value, BufferJSON.reviver);
-      sessionCache.set(id, parsed);
-      return parsed;
-    } catch (e) {
-      console.warn(`[Auth] Erro ao ler ${id} do PostgreSQL:`, e.message);
-      return null;
-    }
-  };
+      credsObj = JSON.parse(credsRes.rows[0].value);
+    } catch (_) {}
 
-  const writeData = async (id, data) => {
-    sessionCache.set(id, data);
-    try {
-      const value = JSON.stringify(data, BufferJSON.replacer);
-      await pgPool.query(
-        "INSERT INTO zap_session (id, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (id) DO UPDATE SET value = $2, updated_at = NOW()",
-        [id, value]
-      );
-    } catch (e) {
-      console.error(`❌ [PostgreSQL] Erro ao salvar ${id}:`, e.message);
+    // CRÍTICO: Só restaura se a sessão estiver de fato AUTENTICADA (me.id presente)
+    if (!credsObj || !credsObj.me || !credsObj.me.id) {
+      console.log("ℹ️ [Auth] Nenhuma sessão ativa no banco (me ausente). Limpando para QR Code limpo.");
+      await clearDbAuth();
+      return false;
     }
-  };
 
-  const removeData = async (id) => {
-    sessionCache.delete(id);
-    try {
-      await pgPool.query("DELETE FROM zap_session WHERE id = $1", [id]);
-    } catch (e) {
-      console.error(`❌ [PostgreSQL] Erro ao remover ${id}:`, e.message);
+    if (!fs.existsSync(authDir)) {
+      fs.mkdirSync(authDir, { recursive: true });
     }
-  };
 
-  let credsData = sessionCache.get("creds") || (await readData("creds"));
-  if (!credsData) {
-    console.log("ℹ️ [Auth] Nenhuma credencial existente em zap_session. Inicializando novas credenciais.");
-    credsData = initAuthCreds();
-    sessionCache.set("creds", credsData);
-    await writeData("creds", credsData);
+    const allRows = await pgPool.query(
+      "SELECT id, value FROM zap_session WHERE id NOT LIKE 'bot_%'"
+    );
+    for (const row of allRows.rows) {
+      const fileName = row.id.endsWith(".json") ? row.id : `${row.id}.json`;
+      fs.writeFileSync(path.join(authDir, fileName), row.value, "utf-8");
+    }
+    console.log(`✅ [Auth] ${allRows.rows.length} arquivos de sessão autenticada restaurados do Supabase!`);
+    return true;
+  } catch (err) {
+    console.error("Erro ao restaurar sessão do PostgreSQL:", err.message);
+    return false;
   }
-
-  const state = {
-    creds: credsData,
-    keys: {
-      get: async (type, ids) => {
-        const data = {};
-        const missing = [];
-        for (const id of ids) {
-          const fullKey = `${type}-${id}`;
-          if (sessionCache.has(fullKey)) {
-            data[id] = sessionCache.get(fullKey);
-          } else {
-            missing.push({ id, fullKey });
-          }
-        }
-
-        if (missing.length > 0 && pgPool) {
-          try {
-            const fullKeys = missing.map((m) => m.fullKey);
-            const res = await pgPool.query(
-              "SELECT id, value FROM zap_session WHERE id = ANY($1::text[])",
-              [fullKeys]
-            );
-            const foundMap = new Map();
-            for (const row of res.rows) {
-              foundMap.set(row.id, JSON.parse(row.value, BufferJSON.reviver));
-            }
-            for (const m of missing) {
-              let val = foundMap.get(m.fullKey) || null;
-              if (type === "app-state-sync-key" && val) {
-                val = proto.Message.AppStateSyncKeyData.fromObject(val);
-              }
-              if (val) {
-                sessionCache.set(m.fullKey, val);
-              }
-              data[m.id] = val;
-            }
-          } catch (err) {
-            console.error("Erro na busca em lote de chaves no PostgreSQL:", err.message);
-            for (const m of missing) {
-              let val = await readData(m.fullKey);
-              if (type === "app-state-sync-key" && val) {
-                val = proto.Message.AppStateSyncKeyData.fromObject(val);
-              }
-              if (val) {
-                sessionCache.set(m.fullKey, val);
-              }
-              data[m.id] = val;
-            }
-          }
-        }
-        return data;
-      },
-      set: async (data) => {
-        const upserts = [];
-        const deletes = [];
-        for (const category in data) {
-          for (const id in data[category]) {
-            const fullKey = `${category}-${id}`;
-            const value = data[category][id];
-            if (value) {
-              sessionCache.set(fullKey, value);
-              upserts.push({ id: fullKey, value: JSON.stringify(value, BufferJSON.replacer) });
-            } else {
-              sessionCache.delete(fullKey);
-              deletes.push(fullKey);
-            }
-          }
-        }
-        if (!pgPool) return;
-        try {
-          if (upserts.length > 0) {
-            const ids = upserts.map((u) => u.id);
-            const values = upserts.map((u) => u.value);
-            await pgPool.query(
-              `INSERT INTO zap_session (id, value, updated_at)
-               SELECT unnest($1::text[]), unnest($2::text[]), NOW()
-               ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-              [ids, values]
-            );
-          }
-          if (deletes.length > 0) {
-            await pgPool.query("DELETE FROM zap_session WHERE id = ANY($1::text[])", [deletes]);
-          }
-        } catch (err) {
-          console.error("❌ [PostgreSQL] Erro ao persistir chaves em lote:", err.message);
-        }
-      },
-    },
-  };
-
-  const saveCreds = async () => {
-    try {
-      await writeData("creds", state.creds);
-      console.log("💾 [PostgreSQL] Credenciais da sessão (creds) salvas com sucesso!");
-    } catch (e) {
-      console.error("❌ [PostgreSQL] Erro ao salvar creds:", e.message);
-    }
-  };
-  console.log("✅ [PostgreSQL] Sessão do WhatsApp vinculada com persistência e cache em memória!");
-  return { state, saveCreds };
 }
 
-async function clearPostgresSession() {
-  sessionCache.clear();
+// Persistir arquivos da sessão autenticada no banco de dados
+let isSyncing = false;
+async function syncAuthToDb() {
+  if (!pgPool || !fs.existsSync(authDir) || isSyncing) return;
+  isSyncing = true;
+  try {
+    const credsPath = path.join(authDir, "creds.json");
+    if (!fs.existsSync(credsPath)) {
+      isSyncing = false;
+      return;
+    }
+    const credsRaw = fs.readFileSync(credsPath, "utf-8");
+    let creds = null;
+    try {
+      creds = JSON.parse(credsRaw);
+    } catch (_) {}
+
+    if (!creds || !creds.me || !creds.me.id) {
+      isSyncing = false;
+      return;
+    }
+
+    const files = fs.readdirSync(authDir);
+    const upserts = [];
+    for (const f of files) {
+      if (f.endsWith(".json")) {
+        const content = fs.readFileSync(path.join(authDir, f), "utf-8");
+        upserts.push({ id: f, value: content });
+      }
+    }
+
+    if (upserts.length > 0) {
+      const ids = upserts.map((u) => u.id);
+      const values = upserts.map((u) => u.value);
+      await pgPool.query(
+        `INSERT INTO zap_session (id, value, updated_at)
+         SELECT unnest($1::text[]), unnest($2::text[]), NOW()
+         ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [ids, values]
+      );
+      await pgPool.query(
+        `INSERT INTO zap_session (id, value, updated_at) VALUES ('creds', $1, NOW())
+         ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [credsRaw]
+      );
+      console.log(`💾 [Auth] ${upserts.length} arquivos de sessão salvos no Supabase.`);
+    }
+  } catch (err) {
+    console.error("Erro ao sincronizar sessão com PostgreSQL:", err.message);
+  } finally {
+    isSyncing = false;
+  }
+}
+
+// Limpar dados do Supabase
+async function clearDbAuth() {
   if (!pgPool) return;
   try {
-    await pgPool.query("DELETE FROM zap_session WHERE id != 'bot_active_leader'");
-    console.log("🗑️ [PostgreSQL] Sessão do WhatsApp apagada do banco.");
+    await pgPool.query("DELETE FROM zap_session WHERE id NOT LIKE 'bot_%'");
+    console.log("🗑️ [Auth] Dados de sessão removidos do Supabase.");
   } catch (e) {
-    console.error("❌ Erro ao apagar sessão no PostgreSQL:", e.message);
+    console.error("Erro ao limpar dados no Supabase:", e.message);
   }
 }
 
-let sock = null;
-let qrCodeBase64 = null;
-let pairingCode = null;
-let lastQrTime = null;
-let status = "DISCONNECTED"; // "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "STANDBY"
-let connectedPhone = null;
-let isStarting = false;
-let reconnectTimeout = null;
-let lastDisconnectInfo = {
-  statusCode: null,
-  error: null,
-  time: null,
-  disconnectCount: 0,
-};
+// Limpar arquivos locais
+function clearLocalAuth() {
+  try {
+    if (fs.existsSync(authDir)) {
+      fs.rmSync(authDir, { recursive: true, force: true });
+    }
+  } catch (e) {
+    console.error("Erro ao remover auth_info_baileys local:", e.message);
+  }
+}
 
-// Identificador único da instância para eleição de líder e prevenção de erro 440
+// =========================================================================
+// ELEIÇÃO DE LÍDER E PREVENÇÃO DE CONFLITO RENDER (ERRO 440)
+// =========================================================================
 const INSTANCE_ID = `inst-${process.pid}-${Math.random().toString(36).substring(2, 7)}`;
 let isLeader = false;
 let leaderHeartbeatInterval = null;
@@ -245,7 +185,7 @@ let leaderHeartbeatInterval = null;
 async function checkAndAcquireLeader() {
   if (!pgPool) return true;
   try {
-    const res = await pgPool.query("SELECT value FROM zap_session WHERE id = 'bot_active_leader'");
+    const res = await pgPool.query("SELECT value, updated_at FROM zap_session WHERE id = 'bot_active_leader'");
     const now = Date.now();
     if (res.rows.length > 0) {
       try {
@@ -255,7 +195,8 @@ async function checkAndAcquireLeader() {
           startLeaderHeartbeat();
           return true;
         }
-        if (now - (leader.updatedAt || 0) < 15000) {
+        const leaderAge = now - (new Date(res.rows[0].updated_at).getTime() || leader.updatedAt || 0);
+        if (leaderAge < 8000) {
           isLeader = false;
           return false;
         }
@@ -270,7 +211,7 @@ async function checkAndAcquireLeader() {
     startLeaderHeartbeat();
     return true;
   } catch (err) {
-    console.error("Erro ao verificar liderança de instância:", err.message);
+    console.error("Erro ao verificar liderança:", err.message);
     return true;
   }
 }
@@ -286,66 +227,51 @@ function startLeaderHeartbeat() {
         [payload]
       );
     } catch (_) {}
-  }, 5000);
+  }, 3000);
 }
 
-function releaseLeader() {
+async function releaseLeader() {
   isLeader = false;
   if (leaderHeartbeatInterval) {
     clearInterval(leaderHeartbeatInterval);
     leaderHeartbeatInterval = null;
   }
+  if (pgPool) {
+    try {
+      await pgPool.query("DELETE FROM zap_session WHERE id = 'bot_active_leader'");
+    } catch (_) {}
+  }
 }
 
-// Controle de sessões dos clientes, mapa de JIDs e deduplicação de mensagens
+// =========================================================================
+// ESTADO GLOBAL DO SERVIÇO
+// =========================================================================
+let sock = null;
+let qrCodeBase64 = null;
+let lastQrTime = null;
+let status = "DISCONNECTED"; // "DISCONNECTED" | "CONNECTING" | "CONNECTED"
+let connectedPhone = null;
+let isStarting = false;
+let reconnectTimeout = null;
+let lastDisconnectInfo = {
+  statusCode: null,
+  error: null,
+  time: null,
+  disconnectCount: 0,
+};
+
 const userSessions = new Map();
 const phoneToJidMap = new Map();
 const processedMessageIds = new Set();
 
-// Limpar IDs antigos a cada 10 minutos
 setInterval(() => {
   if (processedMessageIds.size > 2000) {
     processedMessageIds.clear();
   }
 }, 10 * 60 * 1000);
 
-// Monitor de inatividade de conversas (a cada 2 minutos)
-setInterval(async () => {
-  if (!sock) return;
-  try {
-    const db = lerBancoCentral();
-    const timeoutMin = db.config?.tempo_inatividade_bot_minutos || 15;
-    const timeoutMs = timeoutMin * 60 * 1000;
-    const agoraMs = Date.now();
-    const stepsMonitorados = ["ESCOLHENDO_SERVICO", "ESCOLHENDO_DIA", "ESCOLHENDO_HORARIO", "SINAL_EXPIRADO_MENU"];
-
-    for (const [jid, session] of userSessions.entries()) {
-      if (session && stepsMonitorados.includes(session.step) && session.lastActivity) {
-        if (agoraMs - session.lastActivity >= timeoutMs && !session.avisoInatividadeEnviado) {
-          session.avisoInatividadeEnviado = true;
-          const nomeCli = session.nomeCliente || "Cliente";
-
-          const msgInatividade = db.config?.mensagens_zap?.inatividade_encerramento
-            ? formatarMensagemZap(db.config.mensagens_zap.inatividade_encerramento, { cliente: nomeCli })
-            : `🌸 *Atendimento pausado por inatividade* ⏳\n\n` +
-              `Olá, *${nomeCli}*! Notamos que você não respondeu há algum tempo, então encerramos este atendimento para liberar o sistema.\n\n` +
-              `Quando desejar agendar ou tirar dúvidas no *Studio Malu Alves Beauty*, basta nos mandar um *Oi* por aqui! Teremos o maior prazer em atender você! ✨`;
-
-          console.log(`>>> [Inatividade Auto-Close] Encerrando sessão de ${jid} (${nomeCli}) após ${timeoutMin} minutos de inatividade.`);
-          userSessions.set(jid, { step: "INICIAL", lastActivity: agoraMs });
-          await enviarMensagemHumana(jid, msgInatividade);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Erro no monitor de inatividade:", err);
-  }
-}, 2 * 60 * 1000);
-
-// Helper para sleep/delay
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
-// Helper para formatar moeda
 function formatarMoeda(valor) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valor);
 }
@@ -369,16 +295,12 @@ async function atualizarConfigRemoto() {
         } catch (_) {}
       }
     }
-  } catch (err) {
-    // Falha silenciosa de sincronia de rede
-  }
+  } catch (err) {}
 }
 
-// Sincronizar na inicialização e a cada 30 segundos
 atualizarConfigRemoto();
 setInterval(atualizarConfigRemoto, 30 * 1000);
 
-// Ler dados do storage central com sincronia em tempo real
 function lerBancoCentral() {
   let data = { servicos: [], agendamentos: [], clientes: [], config: {} };
   try {
@@ -389,7 +311,6 @@ function lerBancoCentral() {
     console.error("Erro ao ler data_storage.json:", e);
   }
 
-  // Mescla com as configurações e mensagens salvas no painel (Vercel/Supabase)
   if (remoteConfigCache) {
     data.config = {
       ...(data.config || {}),
@@ -411,7 +332,6 @@ function lerBancoCentral() {
   return data;
 }
 
-// Serviços Padrão do Studio
 const servicosPadrao = [
   { id: "serv-1", titulo: "Design de Sobrancelhas Simples", preco: 30.0, duracao_minutos: 30 },
   { id: "serv-2", titulo: "Design com Henna", preco: 45.0, duracao_minutos: 45 },
@@ -436,9 +356,8 @@ function obterCumprimentoHorario() {
 
 function formatarMensagemZap(template, vars) {
   let resultado = template;
-  const cumprimento = obterCumprimentoHorario();
   const varsCompletas = {
-    cumprimento,
+    cumprimento: obterCumprimentoHorario(),
     ...vars,
   };
   for (const chave in varsCompletas) {
@@ -491,7 +410,6 @@ function verificarRespostaCustomizada(textoLimpo, config) {
   return null;
 }
 
-// Buscar cliente cadastrado pelo telefone
 function buscarClientePorTelefone(telefoneLimpo) {
   const db = lerBancoCentral();
   const tel = telefoneLimpo.replace(/\D/g, "");
@@ -501,7 +419,6 @@ function buscarClientePorTelefone(telefoneLimpo) {
   });
 }
 
-// Buscar agendamento ativo (CONFIRMADO ou AGUARDANDO_SINAL) para o cliente
 function buscarAgendamentoAtivo(telefoneLimpo) {
   const db = lerBancoCentral();
   const tel = telefoneLimpo.replace(/\D/g, "");
@@ -518,7 +435,6 @@ function buscarAgendamentoAtivo(telefoneLimpo) {
   });
 }
 
-// Buscar agendamento que esteja aguardando comprovante de sinal
 function buscarAgendamentoAguardandoSinal(telefoneLimpo) {
   const db = lerBancoCentral();
   const tel = telefoneLimpo.replace(/\D/g, "");
@@ -529,7 +445,6 @@ function buscarAgendamentoAguardandoSinal(telefoneLimpo) {
   });
 }
 
-// Gerar lista de 4 dias disponíveis (Hoje, Amanhã, +2 dias)
 function gerarDiasDisponiveis() {
   const dias = [];
   const hoje = new Date();
@@ -540,7 +455,7 @@ function gerarDiasDisponiveis() {
 
     const diaSemanaNum = d.getDay();
     if (diaSemanaNum === 0 && i > 0) {
-      continue; // Pular domingo se fechado
+      continue;
     }
 
     const isoData = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -553,7 +468,6 @@ function gerarDiasDisponiveis() {
   return dias;
 }
 
-// Cálculo de horários livres para um dia específico
 function calcularHorariosParaData(dataIso) {
   const agora = new Date();
   const hojeStr = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
@@ -569,17 +483,15 @@ function calcularHorariosParaData(dataIso) {
   );
 
   const horariosOcupados = agendamentosDoDia.map((a) => {
-    const hora = a.horario_inicio.split("T")[1]?.slice(0, 5) || "00:00";
-    return hora;
+    return a.horario_inicio.split("T")[1]?.slice(0, 5) || "00:00";
   });
 
   const horariosDisponiveis = [];
-  const inicioExpediente = 9 * 60; // 09:00
-  const fimExpediente = 20 * 60; // 20:00
+  const inicioExpediente = 9 * 60;
+  const fimExpediente = 20 * 60;
 
   for (let min = inicioExpediente; min + 30 <= fimExpediente; min += 30) {
-    if (min >= 12 * 60 && min < 13 * 60) continue; // Almoço
-
+    if (min >= 12 * 60 && min < 13 * 60) continue;
     if (ehHoje && min <= minutoAtualTotal + 15) continue;
 
     const h = Math.floor(min / 60);
@@ -599,11 +511,9 @@ function calcularHorariosParaData(dataIso) {
   return horariosDisponiveis.slice(0, 8);
 }
 
-// Gravação de agendamento no Next.js (Vercel ou Local)
 async function salvarAgendamentoNoPainel(dados) {
   try {
-    const appUrl = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
-    const res = await fetch(`${appUrl}/api/agendamentos`, {
+    const res = await fetch(`${VERCEL_API_URL}/api/agendamentos`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(dados),
@@ -614,11 +524,9 @@ async function salvarAgendamentoNoPainel(dados) {
   }
 }
 
-// Cancelar agendamento ativo via API
 async function cancelarAgendamentoNoPainel(id) {
   try {
-    const appUrl = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
-    const res = await fetch(`${appUrl}/api/agendamentos`, {
+    const res = await fetch(`${VERCEL_API_URL}/api/agendamentos`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status: "CANCELADO" }),
@@ -629,11 +537,9 @@ async function cancelarAgendamentoNoPainel(id) {
   }
 }
 
-// Aprovar comprovante de sinal e confirmar agendamento no painel
 async function aprovarComprovanteCliente(telefoneLimpo) {
   try {
-    const appUrl = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
-    const res = await fetch(`${appUrl}/api/agendamentos`);
+    const res = await fetch(`${VERCEL_API_URL}/api/agendamentos`);
     if (res.ok) {
       const ags = await res.json();
       const tel = String(telefoneLimpo || "").replace(/\D/g, "");
@@ -643,7 +549,7 @@ async function aprovarComprovanteCliente(telefoneLimpo) {
         return aTel === tel || aTel === tel.slice(2) || `55${aTel}` === tel;
       });
       if (pendente) {
-        await fetch(`${appUrl}/api/agendamentos`, {
+        await fetch(`${VERCEL_API_URL}/api/agendamentos`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -663,20 +569,17 @@ async function aprovarComprovanteCliente(telefoneLimpo) {
   return null;
 }
 
-// Verificar se um horário específico (ex: 2026-11-07T10:00:00) continua disponível na agenda
 async function verificarSeHorarioLivre(dataHoraIso) {
   if (!dataHoraIso) return false;
   try {
-    const appUrl = (process.env.APP_URL || "https://malu-alvesbeauty.vercel.app").replace(/\/$/, "");
     let ags = [];
     try {
-      const res = await fetch(`${appUrl}/api/agendamentos`);
+      const res = await fetch(`${VERCEL_API_URL}/api/agendamentos`);
       if (res.ok) {
         ags = await res.json();
       }
-    } catch (e) {
-      // Fallback local
-    }
+    } catch (e) {}
+
     if (!ags || ags.length === 0) {
       const db = lerBancoCentral();
       ags = db.agendamentos || [];
@@ -685,10 +588,9 @@ async function verificarSeHorarioLivre(dataHoraIso) {
     const agora = new Date();
     const dataHoraAlvo = new Date(dataHoraIso);
     if (dataHoraAlvo.getTime() <= agora.getTime()) {
-      return false; // Horário já no passado
+      return false;
     }
 
-    // O horário está ocupado se houver algum agendamento ativo (não cancelado)
     const ocupado = ags.some((a) => {
       if (a.status === "CANCELADO") return false;
       return a.horario_inicio === dataHoraIso || a.horario_inicio.startsWith(dataHoraIso.slice(0, 16));
@@ -701,13 +603,12 @@ async function verificarSeHorarioLivre(dataHoraIso) {
   }
 }
 
-// Envio instantâneo e ultrarrápido de mensagens
 async function enviarMensagemHumana(remoteJid, texto) {
   if (!sock) return;
   try {
     sock.sendPresenceUpdate("composing", remoteJid).catch(() => {});
     await sock.sendMessage(remoteJid, { text: texto });
-    console.log(`>>> [WhatsApp] Resposta instantânea enviada com sucesso para ${remoteJid}`);
+    console.log(`>>> [WhatsApp] Resposta enviada com sucesso para ${remoteJid}`);
   } catch (err) {
     console.error("Erro ao enviar mensagem:", err);
   }
@@ -715,44 +616,37 @@ async function enviarMensagemHumana(remoteJid, texto) {
 
 async function resolverRemoteJid(telefone) {
   let telLimpo = String(telefone || "").replace(/\D/g, "");
-  // Remover zeros à esquerda (ex: 082994247688 -> 82994247688)
   if (telLimpo.startsWith("0")) {
     telLimpo = telLimpo.replace(/^0+/, "");
   }
   if (!telLimpo) return null;
 
-  // 1. Verificar se já temos no mapa de conversas ativas
   let targetJid =
     phoneToJidMap.get(telLimpo) ||
     phoneToJidMap.get(`55${telLimpo}`) ||
     phoneToJidMap.get(telLimpo.startsWith("55") ? telLimpo.slice(2) : telLimpo);
 
   if (targetJid) {
-    console.log(`>>> [JID Resolver] Encontrado no cache para ${telLimpo}: ${targetJid}`);
     return targetJid;
   }
 
-  // 2. Se temos Baileys sock conectado, consultar o WhatsApp diretamente
   if (sock) {
     try {
       const numCom55 = telLimpo.startsWith("55") ? telLimpo : `55${telLimpo}`;
       const res = await sock.onWhatsApp(numCom55);
       if (res && res.length > 0 && res[0].exists) {
         targetJid = res[0].jid;
-        console.log(`>>> [JID Resolver] onWhatsApp validou com sucesso: ${numCom55} -> ${targetJid}`);
         phoneToJidMap.set(telLimpo, targetJid);
         phoneToJidMap.set(numCom55, targetJid);
         return targetJid;
       }
 
-      // Se não encontrou, testar variação de 8 dígitos (sem o 9) para celulares brasileiros
       if (numCom55.length === 13 && numCom55.startsWith("55")) {
         const ddd = numCom55.slice(2, 4);
         const semNono = `55${ddd}${numCom55.slice(5)}`;
         const resSemNono = await sock.onWhatsApp(semNono);
         if (resSemNono && resSemNono.length > 0 && resSemNono[0].exists) {
           targetJid = resSemNono[0].jid;
-          console.log(`>>> [JID Resolver] onWhatsApp validou sem 9º dígito: ${semNono} -> ${targetJid}`);
           phoneToJidMap.set(telLimpo, targetJid);
           phoneToJidMap.set(numCom55, targetJid);
           return targetJid;
@@ -763,15 +657,13 @@ async function resolverRemoteJid(telefone) {
     }
   }
 
-  // 3. Fallback padrão
   const numFinal = telLimpo.startsWith("55") ? telLimpo : `55${telLimpo}`;
   targetJid = `${numFinal}@s.whatsapp.net`;
-  console.log(`>>> [JID Resolver] Usando JID padrão: ${targetJid}`);
   return targetJid;
 }
 
 // =========================================================================
-// MOTOR CONVERSACIONAL INTELIGENTE COM CAPTURA AUTOMÁTICA DE NOME
+// MOTOR CONVERSACIONAL INTELIGENTE DO STUDIO
 // =========================================================================
 async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realPhone, ehMidia = false) {
   const textoLimpo = (textoUsuario || "").trim().toLowerCase();
@@ -786,11 +678,9 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   const timeoutMin = db.config?.tempo_inatividade_bot_minutos || 15;
   const timeoutMs = timeoutMin * 60 * 1000;
 
-  // Auto-reset por inatividade caso a conversa anterior tenha sido abandonada
   if (session.step && session.step !== "INICIAL" && session.lastActivity) {
     const tempoInativo = agoraMs - session.lastActivity;
     if (tempoInativo > timeoutMs && session.step !== "AGUARDANDO_COMPROVANTE") {
-      console.log(`>>> [Inatividade] Sessão de ${remoteJid} expirou (${Math.round(tempoInativo / 60000)}m > ${timeoutMin}m). Resetando para INICIAL.`);
       session = { step: "INICIAL", lastActivity: agoraMs };
     }
   }
@@ -799,16 +689,13 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   const letras = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
   const telefoneFinal = realPhone || remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "").replace(/\D/g, "");
 
-  // 1. Identificar cliente e agendamentos existentes
   const clienteCadastrado = buscarClientePorTelefone(telefoneFinal);
   const agendamentoAtivo = buscarAgendamentoAtivo(telefoneFinal);
   const servicosAtivos = obterServicosAtivos();
 
-  // 2. Captura direta do nome do perfil do WhatsApp (sempre atualizado pelo Zap do cliente)
   const pushNameLimpo = (pushNameRaw || "").replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, "").trim();
   const nomeDetectado = pushNameLimpo || "Cliente";
 
-  // 3. Verificação de envio de comprovante PIX
   const ehComprovante =
     ehMidia ||
     textoLimpo.includes("comprovante") ||
@@ -840,17 +727,13 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
     }
   }
 
-  // =========================================================================
-  // ETAPA 1: MENU PRINCIPAL INTELIGENTE
-  // =========================================================================
+  // ETAPA 1: MENU PRINCIPAL
   if (session.step === "INICIAL") {
-    // SE O CLIENTE JÁ POSSUI UM AGENDAMENTO ATIVO PENDENTE:
     if (agendamentoAtivo) {
       const horaStr = agendamentoAtivo.horario_inicio.split("T")[1]?.slice(0, 5) || "";
       const dataStr = agendamentoAtivo.horario_inicio.split("T")[0].split("-").reverse().slice(0, 2).join("/");
 
       if (textoLimpo === "1" || textoLimpo.includes("desmarcar") || textoLimpo.includes("cancelar") || textoLimpo.includes("remarcar")) {
-        // Cancelar agendamento atual e oferecer remarcação
         await cancelarAgendamentoNoPainel(agendamentoAtivo.id);
 
         const diasDisponiveis = gerarDiasDisponiveis();
@@ -888,9 +771,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
           `*3* ➔ Falar com a Designer\n\n` +
           `_Digite o número da opção desejada:_`;
       }
-    }
-    // SE É CLIENTE RECORRENTE OU NOVO SEM AGENDAMENTO ATIVO:
-    else {
+    } else {
       if (
         textoLimpo === "1" ||
         textoLimpo.includes("agendar") ||
@@ -899,7 +780,6 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
         textoLimpo.includes("horario") ||
         textoLimpo.includes("horário")
       ) {
-        // Se já tem histórico e último serviço conhecido
         if (clienteCadastrado?.ultimo_servico_nome) {
           const ultimoSrv = servicosAtivos.find((s) => s.id === clienteCadastrado.ultimo_servico_id) || servicosAtivos[0];
           const diasDisponiveis = gerarDiasDisponiveis();
@@ -910,8 +790,8 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
             nomeCliente: nomeDetectado,
           };
           const listaDias = diasDisponiveis.map((d, i) => `*${i + 1}* - ${d.rotulo}`).join("\n");
-
           const cumprimento = obterCumprimentoHorario();
+
           resposta =
             `✨ *${cumprimento}, ${nomeDetectado}!* ✨\n` +
             `Vamos marcar seu *${ultimoSrv.titulo}* (${formatarMoeda(ultimoSrv.preco)})?\n\n` +
@@ -932,7 +812,6 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       } else if (textoLimpo === "3" || textoLimpo.includes("dono") || textoLimpo.includes("humano") || textoLimpo.includes("designer")) {
         resposta = `👩‍💼 Um momento, ${nomeDetectado}! Já notifiquei a equipe e iremos te responder em instantes por aqui.`;
       } else {
-        // Checar se o cliente digitou uma das novas opções customizadas cadastradas pelo ADM
         const respCustom = verificarRespostaCustomizada(textoLimpo, db.config);
         if (respCustom) {
           resposta = `${respCustom.resposta}\n\n_Digite *1* para agendar ou *Menu* para ver as opções._`;
@@ -970,9 +849,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
     }
   }
 
-  // =========================================================================
   // ETAPA 2: ESCOLHENDO SERVIÇO
-  // =========================================================================
   else if (session.step === "ESCOLHENDO_SERVICO") {
     const num = parseInt(textoLimpo, 10);
     if (!isNaN(num) && num >= 1 && num <= servicosAtivos.length) {
@@ -987,7 +864,6 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       };
 
       const listaDias = diasDisponiveis.map((d, i) => `*${i + 1}* - ${d.rotulo}`).join("\n");
-
       resposta =
         `✅ Procedimento selecionado: *${srv.titulo}* (${formatarMoeda(srv.preco)})\n\n` +
         `📅 *Escolha o dia para seu atendimento:*\n\n${listaDias}\n\n` +
@@ -997,9 +873,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
     }
   }
 
-  // =========================================================================
   // ETAPA 3: ESCOLHENDO DIA
-  // =========================================================================
   else if (session.step === "ESCOLHENDO_DIA") {
     if (textoLimpo === "outro" || textoLimpo.includes("mudar")) {
       resposta =
@@ -1030,7 +904,6 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
           };
 
           const listaSlots = horarios.map((h, i) => `*${letras[i].toUpperCase()}*) ${h}`).join("\n");
-
           resposta =
             `📅 Dia: *${diaEscolhido.rotulo}*\n\n` +
             `🕒 *Escolha o horário livre:*\n\n${listaSlots}\n\n` +
@@ -1042,9 +915,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
     }
   }
 
-  // =========================================================================
-  // ETAPA 4: ESCOLHENDO HORÁRIO ➔ CONFIRMAÇÃO DIRETA (COM SINAL SE ATIVADO)
-  // =========================================================================
+  // ETAPA 4: ESCOLHENDO HORÁRIO
   else if (session.step === "ESCOLHENDO_HORARIO") {
     const idx = letras.indexOf(textoLimpo);
 
@@ -1071,7 +942,6 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
         }
       }
 
-      // Sincronizar em tempo real com o Painel Admin do Dono!
       salvarAgendamentoNoPainel({
         cliente_nome: nomeFinal,
         cliente_telefone: telefoneFinal,
@@ -1152,9 +1022,7 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
     }
   }
 
-  // =========================================================================
   // ETAPA: SINAL EXPIRADO - RECUPERAÇÃO INTERATIVA
-  // =========================================================================
   else if (session.step === "SINAL_EXPIRADO_MENU") {
     const nomeCli = session.nomeCliente || nomeDetectado;
     const srv = session.servico || servicosAtivos[0];
@@ -1170,7 +1038,6 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       textoLimpo.includes("ainda") ||
       textoLimpo.includes("livre")
     ) {
-      // Verificar em tempo real se o mesmo horário continua vago
       const livre = await verificarSeHorarioLivre(dataHoraOrig);
       const cfg = db.config || {};
       const chavePix = cfg.chave_pix || "82981430673";
@@ -1179,7 +1046,6 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
       const tempoLimite = cfg.tempo_limite_sinal_minutos || 30;
 
       if (livre) {
-        // Horário continua disponível! Reativa a reserva no sistema
         await salvarAgendamentoNoPainel({
           cliente_nome: nomeCli,
           cliente_telefone: telefoneFinal,
@@ -1268,6 +1134,9 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
   return resposta;
 }
 
+// =========================================================================
+// CICLO DE CONEXÃO DO WHATSAPP (BAILEYS)
+// =========================================================================
 async function startWhatsApp(force = false) {
   if (status === "CONNECTED") {
     console.log(`[WhatsApp][${INSTANCE_ID}] Já está CONNECTED. Mantendo conexão ativa.`);
@@ -1280,22 +1149,20 @@ async function startWhatsApp(force = false) {
 
   isStarting = true;
 
-  // Proteção de líder único distribuído: impede que duas instâncias concorram pelo WhatsApp (Erro 440)
   const canBeLeader = await checkAndAcquireLeader();
   if (!canBeLeader) {
-    console.log(`⚠️ [WhatsApp][${INSTANCE_ID}] Outra instância já está ativa como líder conectada ao WhatsApp. Entrando em STANDBY para evitar conflito 440...`);
-    status = "STANDBY";
+    console.log(`ℹ️ [WhatsApp][${INSTANCE_ID}] Aguardando término da instância anterior para assumir liderança...`);
+    status = "CONNECTING";
     isStarting = false;
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
     reconnectTimeout = setTimeout(() => {
       reconnectTimeout = null;
       startWhatsApp();
-    }, 10000);
+    }, 2000);
     return;
   }
 
   status = "CONNECTING";
-  qrCodeBase64 = null;
 
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
@@ -1312,12 +1179,16 @@ async function startWhatsApp(force = false) {
       }
     } catch (_) {}
     sock = null;
-    // Aguarda encerramento do socket TCP/WS anterior para prevenir Erro 440 (conflict)
-    await sleep(1000);
+    await sleep(800);
   }
 
   try {
-    const { state, saveCreds } = await usePostgresAuthState();
+    const hasAuthInDb = await restoreAuthFromDb();
+    if (!hasAuthInDb) {
+      clearLocalAuth();
+    }
+
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const logger = pino({ level: "silent" });
     const { version } = await fetchLatestWaWebVersion().catch(async () => {
       return await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1053925913] }));
@@ -1328,7 +1199,7 @@ async function startWhatsApp(force = false) {
       auth: state,
       logger,
       printQRInTerminal: false,
-      browser: Browsers.macOS("Desktop"),
+      browser: Browsers.macOS("Chrome"),
       syncFullHistory: false,
       markOnlineOnConnect: false,
       connectTimeoutMs: 60000,
@@ -1341,7 +1212,12 @@ async function startWhatsApp(force = false) {
       }),
     });
 
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", async () => {
+      await saveCreds();
+      if (state.creds?.me?.id) {
+        await syncAuthToDb();
+      }
+    });
 
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -1351,9 +1227,9 @@ async function startWhatsApp(force = false) {
           qrCodeBase64 = await QRCode.toDataURL(qr, { margin: 2, scale: 10 });
           status = "CONNECTING";
           lastQrTime = Date.now();
-          console.log(">>> [WhatsApp] QR Code real gerado para pareamento.");
+          console.log(">>> [WhatsApp] QR Code real gerado para pareamento!");
         } catch (err) {
-          console.error("Erro no QR:", err);
+          console.error("Erro ao gerar QR Code:", err);
         }
       }
 
@@ -1380,15 +1256,27 @@ async function startWhatsApp(force = false) {
           sock = null;
         }
 
-        // CASO 1: Sessão deslogada / revogada explicitamente no celular (401)
-        if (statusCode === DisconnectReason.loggedOut) {
-          console.warn(">>> [WhatsApp] Sessão encerrada no celular (401 LoggedOut). Limpando dados para novo QR Code...");
-          sessionCache.clear();
-          await clearPostgresSession();
-          isStarting = false;
+        isStarting = false;
+
+        // CASO 1: 515 (restartRequired) -> QR Code escaneado com sucesso!
+        if (statusCode === DisconnectReason.restartRequired || statusCode === 515) {
+          console.log(`>>> [WhatsApp][${INSTANCE_ID}] QR Code escaneado com sucesso! Reiniciando socket autenticado (515)...`);
+          status = "CONNECTING";
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            startWhatsApp();
+          }, 1500);
+          return;
+        }
+
+        // CASO 2: 401 (loggedOut) -> Sessão desconectada
+        if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+          console.warn(">>> [WhatsApp] Sessão encerrada ou 401. Limpando credenciais para novo QR Code...");
+          clearLocalAuth();
+          await clearDbAuth();
           status = "CONNECTING";
           qrCodeBase64 = null;
-          lastQrTime = null;
           connectedPhone = null;
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
@@ -1398,35 +1286,19 @@ async function startWhatsApp(force = false) {
           return;
         }
 
-        // CASO 2: Reinicialização obrigatória de pareamento (515 restartRequired)
-        // Quando você escaneia o QR Code, o WhatsApp fecha a conexão com 515 para reabrir autenticado.
-        if (statusCode === DisconnectReason.restartRequired) {
-          console.log(`>>> [WhatsApp][${INSTANCE_ID}] QR Code escaneado com sucesso! Reiniciando socket com credenciais autenticadas (515)...`);
-          isStarting = false;
-          status = "CONNECTING";
-          if (reconnectTimeout) clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(() => {
-            reconnectTimeout = null;
-            startWhatsApp();
-          }, 2000);
-          return;
-        }
-
-        // CASO 3: Conflito de sessão 440 (outra conexão fechando)
+        // CASO 3: 440 (connectionReplaced) -> Conflito temporário
         if (statusCode === 440) {
-          console.warn(`>>> [WhatsApp][${INSTANCE_ID}] Conflito 440 temporário. Aguardando 10s...`);
-          isStarting = false;
+          console.warn(`>>> [WhatsApp][${INSTANCE_ID}] Conflito 440 temporário. Aguardando 5s...`);
           status = "DISCONNECTED";
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
             reconnectTimeout = null;
             startWhatsApp();
-          }, 10000);
+          }, 5000);
           return;
         }
 
-        // CASO 4: Queda temporária de rede, timeout ou rotação do QR Code (428, 408, etc)
-        isStarting = false;
+        // CASO 4: 428 / 408 / Outros
         console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conexão fechada (${statusCode}: ${errorMsg}). Reconectando em 3s...`);
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
@@ -1434,16 +1306,16 @@ async function startWhatsApp(force = false) {
           startWhatsApp();
         }, 3000);
       } else if (connection === "open") {
-        console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conectado com sucesso com sessão persistida no PostgreSQL!`);
+        console.log(`>>> [WhatsApp][${INSTANCE_ID}] Conectado com sucesso!`);
         status = "CONNECTED";
         qrCodeBase64 = null;
-        pairingCode = null;
         lastQrTime = null;
         connectedPhone = sock?.user?.id?.split(":")[0] || "Conectado";
         if (reconnectTimeout) {
           clearTimeout(reconnectTimeout);
           reconnectTimeout = null;
         }
+        await syncAuthToDb();
       }
     });
 
@@ -1470,7 +1342,6 @@ async function startWhatsApp(force = false) {
 
         const remoteJid = msg.key.remoteJid;
 
-        // Desempacotar mensagens efêmeras, viewOnce ou anexos multimídia
         const messageContent =
           msg.message?.ephemeralMessage?.message ||
           msg.message?.viewOnceMessage?.message ||
@@ -1507,10 +1378,8 @@ async function startWhatsApp(force = false) {
         try {
           const resposta = await processarMensagemRobo(remoteJid, texto, pushName, realPhone, ehMidia);
           if (resposta && sock) {
-            console.log(`>>> [WhatsApp] Enviando resposta automática para ${remoteJid}...`);
+            console.log(`>>> [WhatsApp] Enviando resposta para ${remoteJid}...`);
             await enviarMensagemHumana(remoteJid, resposta);
-          } else {
-            console.log(`>>> [WhatsApp] Nenhuma resposta retornada pelo robô para ${remoteJid}`);
           }
         } catch (err) {
           console.error("Erro ao processar mensagem do robô:", err);
@@ -1532,14 +1401,15 @@ async function startWhatsApp(force = false) {
 }
 
 async function disconnectWhatsApp() {
-  releaseLeader();
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   }
   try {
     if (sock) {
-      await sock.logout().catch(() => {});
+      try {
+        await sock.logout();
+      } catch (_) {}
       sock.ev?.removeAllListeners();
       if (typeof sock.end === "function") {
         sock.end(undefined);
@@ -1550,30 +1420,26 @@ async function disconnectWhatsApp() {
     }
     status = "DISCONNECTED";
     qrCodeBase64 = null;
-    pairingCode = null;
     lastQrTime = null;
     connectedPhone = null;
     userSessions.clear();
     phoneToJidMap.clear();
     processedMessageIds.clear();
-    await clearPostgresSession();
-    if (fs.existsSync(authDir)) {
-      fs.rmSync(authDir, { recursive: true, force: true });
-    }
-    console.log(">>> [WhatsApp] Desconectado e banco limpo.");
+    clearLocalAuth();
+    await clearDbAuth();
+    console.log(">>> [WhatsApp] Desconectado e dados limpos com sucesso.");
   } catch (e) {
     console.error("Erro ao desconectar:", e);
   }
 }
 
-// 0. Mensagem Educada e Interativa de Liberação de Vaga por Sinal PIX Expirado
+// =========================================================================
+// ROTAS DE NOTIFICAÇÃO DO STUDIO
+// =========================================================================
 async function notificarCancelamentoSinalExpirado(dados) {
   const { telefone, nome, dataHora, servicoTitulo, servicoId, valor, valorSinal } = dados;
   const targetJid = await resolverRemoteJid(telefone);
-  if (!sock || !targetJid) {
-    console.error(`>>> [Sinal Expirado] Não foi possível resolver targetJid para telefone: ${telefone}`);
-    return false;
-  }
+  if (!sock || !targetJid) return false;
 
   const horaStr = dataHora ? dataHora.split("T")[1]?.slice(0, 5) : "";
   const dataPart = dataHora ? dataHora.split("T")[0] : "";
@@ -1607,7 +1473,6 @@ async function notificarCancelamentoSinalExpirado(dados) {
       `*3* ➔ Falar com a Designer\n\n` +
       `_Digite o número da opção desejada:_`;
 
-  console.log(`>>> [Sinal Expirado] Enviando recuperação interativa para ${targetJid} (${nome})...`);
   userSessions.set(targetJid, {
     step: "SINAL_EXPIRADO_MENU",
     nomeCliente: nome || "Cliente",
@@ -1622,7 +1487,6 @@ async function notificarCancelamentoSinalExpirado(dados) {
   return true;
 }
 
-// 1. Mensagem de Cancelamento pelo Studio
 async function notificarCancelamentoAdmin(telefone, nomeCliente, dataHora) {
   const targetJid = await resolverRemoteJid(telefone);
   if (!sock || !targetJid) return false;
@@ -1645,13 +1509,11 @@ async function notificarCancelamentoAdmin(telefone, nomeCliente, dataHora) {
       `*2* ➔ Falar com a Designer\n\n` +
       `_Digite o número da opção desejada para remarcar:_`;
 
-  console.log(`>>> [Cancelamento] Enviando mensagem para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
   await enviarMensagemHumana(targetJid, mensagem);
   return true;
 }
 
-// 2. Mensagem de Agradecimento após Conclusão do Atendimento
 async function notificarConclusaoAdmin(telefone, nomeCliente, totalVisitas) {
   const targetJid = await resolverRemoteJid(telefone);
   if (!sock || !targetJid) return false;
@@ -1683,20 +1545,18 @@ async function notificarConclusaoAdmin(telefone, nomeCliente, totalVisitas) {
       `Tenha um dia maravilhoso!`;
   }
 
-  console.log(`>>> [Agradecimento] Enviando mensagem para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
   await enviarMensagemHumana(targetJid, mensagem);
   return true;
 }
 
-// 3. Mensagem Personalizada de Falta
 async function notificarFaltaAdmin(telefone, nomeCliente, servicoTitulo, dataHora) {
   const targetJid = await resolverRemoteJid(telefone);
   if (!sock || !targetJid) return false;
 
   const horaStr = dataHora ? dataHora.split("T")[1]?.slice(0, 5) : "";
-
   const db = lerBancoCentral();
+
   const mensagem = db.config?.mensagens_zap?.falta_comparecimento
     ? formatarMensagemZap(db.config.mensagens_zap.falta_comparecimento, {
         cliente: nomeCliente,
@@ -1710,19 +1570,14 @@ async function notificarFaltaAdmin(telefone, nomeCliente, servicoTitulo, dataHor
       `*2* ➔ Falar com a Equipe\n\n` +
       `_Digite o número desejado:_`;
 
-  console.log(`>>> [Falta] Enviando mensagem de remarcação para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
   await enviarMensagemHumana(targetJid, mensagem);
   return true;
 }
 
-// 4. Mensagem de Confirmação quando o agendamento é feito pelo PWA / Site
 async function notificarConfirmacaoWeb(telefone, nomeCliente, servicoTitulo, dataHora, valor) {
   const targetJid = await resolverRemoteJid(telefone);
-  if (!sock || !targetJid) {
-    console.error(`>>> [WhatsApp] Não foi possível resolver targetJid para telefone: ${telefone}`);
-    return false;
-  }
+  if (!sock || !targetJid) return false;
 
   const horaStr = dataHora ? dataHora.split("T")[1]?.slice(0, 5) : "";
   const dataPart = dataHora ? dataHora.split("T")[0] : "";
@@ -1746,20 +1601,15 @@ async function notificarConfirmacaoWeb(telefone, nomeCliente, servicoTitulo, dat
       `✅ _Seu horário já está garantido na agenda da designer! Te mandaremos um lembrete 2h antes._\n\n` +
       `Esperamos por você! ✨`;
 
-  console.log(`>>> [Confirmacao Web] Enviando comprovante para ${targetJid} (${nomeCliente})...`);
   userSessions.set(targetJid, { step: "INICIAL" });
   await enviarMensagemHumana(targetJid, mensagem);
   return true;
 }
 
-// 5. Mensagem de Solicitação de Sinal Antecipado via PIX
 async function notificarSolicitacaoSinalWeb(dados) {
   const { telefone, nome, servicoTitulo, dataHora, valor, valorSinal, chavePix, titularPix, tempoLimiteMinutos } = dados;
   const targetJid = await resolverRemoteJid(telefone);
-  if (!sock || !targetJid) {
-    console.error(`>>> [WhatsApp] Não foi possível resolver targetJid para envio de sinal: ${telefone}`);
-    return false;
-  }
+  if (!sock || !targetJid) return false;
 
   const horaStr = dataHora ? dataHora.split("T")[1]?.slice(0, 5) : "";
   const dataPart = dataHora ? dataHora.split("T")[0] : "";
@@ -1801,7 +1651,6 @@ async function notificarSolicitacaoSinalWeb(dados) {
       `Por favor, responda a esta mensagem enviando a *foto ou comprovante* do PIX para que o robô confirme seu horário automaticamente! ✨\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-  console.log(`>>> [Sinal Web] Enviando solicitação de PIX para ${targetJid} (${nome})...`);
   userSessions.set(targetJid, {
     step: "AGUARDANDO_COMPROVANTE",
     servico: { titulo: servicoTitulo, preco: valorTotalNum },
@@ -1813,6 +1662,9 @@ async function notificarSolicitacaoSinalWeb(dados) {
   return true;
 }
 
+// =========================================================================
+// SERVIDOR HTTP
+// =========================================================================
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -1824,13 +1676,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === "/" || req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, status, uptime: Math.round(process.uptime()) }));
+    return;
+  }
+
   if (req.url === "/status" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
         status,
         qrCodeBase64,
-        pairingCode,
         connectedPhone,
         instanceId: INSTANCE_ID,
         isLeader,
@@ -1839,49 +1696,6 @@ const server = http.createServer(async (req, res) => {
         uptime: Math.round(process.uptime()),
       })
     );
-    return;
-  }
-
-  if (req.url === "/pairing-code" && req.method === "POST") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", async () => {
-      try {
-        const payload = JSON.parse(body || "{}");
-        const rawPhone = payload.phone || "829981430673";
-        const cleanPhone = rawPhone.replace(/\D/g, "");
-        const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-
-        if (status === "CONNECTED") {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true, message: "WhatsApp já está conectado com sucesso!", connectedPhone }));
-          return;
-        }
-
-        if (!sock || !sock.ws || sock.ws.readyState !== 1) {
-          isStarting = false;
-          await startWhatsApp(true);
-          await sleep(3500);
-        }
-
-        if (sock && typeof sock.requestPairingCode === "function") {
-          pairingCode = await sock.requestPairingCode(formattedPhone);
-          console.log(`>>> [WhatsApp] Pairing Code gerado para ${formattedPhone}: ${pairingCode}`);
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true, pairingCode, phone: formattedPhone }));
-          return;
-        } else {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Serviço WhatsApp não está pronto. Tente novamente em alguns segundos." }));
-          return;
-        }
-      } catch (err) {
-        console.error("Erro ao gerar pairing code:", err);
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-        return;
-      }
-    });
     return;
   }
 
@@ -1958,7 +1772,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: true, message: `Notificação enviada.` }));
+        res.end(JSON.stringify({ success: true, message: "Notificação enviada." }));
       } catch (err) {
         console.error("Erro ao enviar notificação:", err);
         res.writeHead(500, { "Content-Type": "application/json" });
@@ -1977,13 +1791,9 @@ server.listen(PORT, "0.0.0.0", () => {
   startWhatsApp();
 });
 
-// Desligamento gracioso para evitar conflitos de sessão (Erro 440) durante deploys no Render
+// Desligamento limpo para liberar liderança imediatamente em novos deploys do Render
 async function gracefulShutdown(signal) {
-  console.log(`>>> [GracefulShutdown] Sinal ${signal} recebido. Desconectando de forma limpa a instância ${INSTANCE_ID}...`);
-  if (leaderHeartbeatInterval) {
-    clearInterval(leaderHeartbeatInterval);
-    leaderHeartbeatInterval = null;
-  }
+  console.log(`>>> [GracefulShutdown] Sinal ${signal} recebido. Liberando liderança da instância ${INSTANCE_ID}...`);
   await releaseLeader();
   if (sock) {
     try {
