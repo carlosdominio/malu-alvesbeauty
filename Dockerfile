@@ -2,4 +2,6 @@ FROM evoapicloud/evolution-api:v2.3.7
 
 ENV SERVER_PORT=8080
 ENV SERVER_TYPE=http
+ENV DATABASE_ENABLED=false
+
 EXPOSE 8080
