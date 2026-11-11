@@ -100,10 +100,36 @@ export class EvolutionService {
       const state = data?.instance?.state || data?.state || "close";
       const isConnected = state === "open";
 
+      let phone: string | null = data?.instance?.ownerJid?.split("@")[0] || null;
+
+      if (isConnected && !phone) {
+        try {
+          const fetchUrl = `${creds.apiUrl}/instance/fetchInstances?instanceName=${creds.instanceName}`;
+          const fetchRes = await fetch(fetchUrl, {
+            method: "GET",
+            headers: this.getHeaders(creds.apiKey),
+            cache: "no-store",
+          });
+          if (fetchRes.ok) {
+            const list = await fetchRes.json();
+            const inst = Array.isArray(list)
+              ? list.find((i: { name?: string }) => i.name === creds.instanceName) || list[0]
+              : list;
+            if (inst?.ownerJid) {
+              phone = inst.ownerJid.split("@")[0];
+            } else if (inst?.number) {
+              phone = String(inst.number);
+            }
+          }
+        } catch {
+          // Fallback silencioso
+        }
+      }
+
       return {
         connected: isConnected,
         state,
-        phone: data?.instance?.ownerJid?.split("@")[0] || null,
+        phone,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";

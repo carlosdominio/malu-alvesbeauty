@@ -899,8 +899,8 @@ export default function WhatsAppPage() {
                     <p className="text-xs text-zinc-400 font-mono">
                       {carregandoStatusInicial
                         ? "Verificando conexão..."
-                        : statusConexao === "CONNECTED" && telefoneConectado
-                        ? formatarTelefone(telefoneConectado)
+                        : statusConexao === "CONNECTED"
+                        ? (telefoneConectado ? formatarTelefone(telefoneConectado) : "WhatsApp Conectado")
                         : statusConexao === "CONNECTING" && qrCodeBase64
                         ? "Aguardando leitura do QR Code"
                         : statusConexao === "CONNECTING" && !qrCodeBase64
@@ -1038,6 +1038,12 @@ export default function WhatsAppPage() {
                     </div>
 
                     <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 text-left text-xs space-y-1.5">
+                      {telefoneConectado && (
+                        <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
+                          <span className="text-zinc-400">WhatsApp Conectado:</span>
+                          <span className="font-mono font-bold text-emerald-400">{formatarTelefone(telefoneConectado)}</span>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="text-zinc-400">Instância:</span>
                         <span className="font-mono font-bold text-zinc-200">{evolutionInstanceName}</span>
