@@ -79,6 +79,11 @@ export class EvolutionService {
     }
 
     try {
+      type ConnectionState = "open" | "connecting" | "close" | "disconnected";
+      let state: ConnectionState = "close";
+      let phone: string | null = null;
+
+      // 1. Consulta o estado de conexão imediato
       const url = `${creds.apiUrl}/instance/connectionState/${creds.instanceName}`;
       const res = await fetch(url, {
         method: "GET",
@@ -86,23 +91,19 @@ export class EvolutionService {
         cache: "no-store",
       });
 
-      if (!res.ok) {
-        if (res.status === 404) {
-          // Instância não existe ainda, tenta criar
-          await this.createInstance(creds);
-          return { connected: false, state: "disconnected" };
+      if (res.ok) {
+        const data = await res.json();
+        const rawState = String(data?.instance?.state || data?.state || "close").toLowerCase();
+        if (rawState === "open" || rawState === "connecting" || rawState === "close" || rawState === "disconnected") {
+          state = rawState;
         }
-        const text = await res.text();
-        return { connected: false, error: `Erro na Evolution API (${res.status}): ${text}` };
+        if (data?.instance?.ownerJid) {
+          phone = data.instance.ownerJid.split("@")[0];
+        }
       }
 
-      const data = await res.json();
-      const state = data?.instance?.state || data?.state || "close";
-      const isConnected = state === "open";
-
-      let phone: string | null = data?.instance?.ownerJid?.split("@")[0] || null;
-
-      if (isConnected && !phone) {
+      // 2. Dupla verificação com fetchInstances para garantir precisão e capturar dados do perfil
+      if (state !== "open" || !phone) {
         try {
           const fetchUrl = `${creds.apiUrl}/instance/fetchInstances?instanceName=${creds.instanceName}`;
           const fetchRes = await fetch(fetchUrl, {
@@ -115,10 +116,18 @@ export class EvolutionService {
             const inst = Array.isArray(list)
               ? list.find((i: { name?: string }) => i.name === creds.instanceName) || list[0]
               : list;
-            if (inst?.ownerJid) {
-              phone = inst.ownerJid.split("@")[0];
-            } else if (inst?.number) {
-              phone = String(inst.number);
+            if (inst) {
+              const fetchState = (inst.connectionStatus || inst.status || inst.state || "").toLowerCase();
+              if (fetchState === "open") {
+                state = "open";
+              } else if (fetchState === "connecting" && state !== "open") {
+                state = "connecting";
+              }
+              if (inst.ownerJid) {
+                phone = inst.ownerJid.split("@")[0];
+              } else if (inst.number) {
+                phone = String(inst.number);
+              }
             }
           }
         } catch {
@@ -127,7 +136,7 @@ export class EvolutionService {
       }
 
       return {
-        connected: isConnected,
+        connected: state === "open",
         state,
         phone,
       };

@@ -40,19 +40,28 @@ export async function GET() {
       });
     }
 
-    // Se desconectado ou conectando, busca o QR Code
-    const qrData = await EvolutionService.getQrCode(creds);
+    if (status.state === "connecting") {
+      return NextResponse.json({
+        configured: true,
+        status: "CONNECTING",
+        connectedPhone: null,
+        qrCodeBase64: null,
+        apiUrl: creds.apiUrl,
+        instanceName: creds.instanceName,
+        webhookUrl: DEFAULT_WEBHOOK_URL,
+      });
+    }
 
     return NextResponse.json({
       configured: true,
-      status: qrData.base64 ? "CONNECTING" : "DISCONNECTED",
+      status: "DISCONNECTED",
       connectedPhone: null,
-      qrCodeBase64: qrData.base64 || null,
-      pairingCode: qrData.pairingCode || null,
+      qrCodeBase64: null,
+      pairingCode: null,
       apiUrl: creds.apiUrl,
       instanceName: creds.instanceName,
       webhookUrl: DEFAULT_WEBHOOK_URL,
-      error: qrData.error || status.error || null,
+      error: status.error || null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro desconhecido";

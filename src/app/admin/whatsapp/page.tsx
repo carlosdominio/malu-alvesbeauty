@@ -198,9 +198,10 @@ export default function WhatsAppPage() {
 
   useEffect(() => {
     checarStatusWhatsApp();
-    const interval = setInterval(checarStatusWhatsApp, 3000);
+    const pollInterval = statusConexao === "CONNECTING" ? 5000 : 12000;
+    const interval = setInterval(checarStatusWhatsApp, pollInterval);
     return () => clearInterval(interval);
-  }, [checarStatusWhatsApp]);
+  }, [checarStatusWhatsApp, statusConexao]);
 
   // Iniciar conexão real (gerar QR Code)
   const handleIniciarConexao = async () => {
