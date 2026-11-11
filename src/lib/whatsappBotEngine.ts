@@ -1,7 +1,12 @@
 import { DataStore } from "@/lib/dataStore";
-import { Servico, BarbeariaConfig, RespostaAutomatica } from "@/types";
+import { Servico, BarbeariaConfig } from "@/types";
 import { formatarMoeda } from "@/lib/utils";
-import { obterCumprimentoHorario } from "@/lib/whatsappTemplates";
+import {
+  formatarMensagem,
+  gerarTextoBoasVindas,
+  MENSAGENS_PADRAO,
+  encontrarRespostaCustomizada,
+} from "@/lib/whatsappTemplates";
 
 interface BotSession {
   step: "INICIAL" | "ESCOLHENDO_SERVICO" | "ESCOLHENDO_DIA" | "ESCOLHENDO_SLOT" | "DIGITANDO_NOME" | "AGUARDANDO_COMPROVANTE" | "FINALIZADO";
@@ -81,12 +86,21 @@ export class WhatsAppBotEngine {
           }
         }
 
+        const dataFormatada = session.diaIso
+          ? session.diaIso.split("-").reverse().slice(0, 2).join("/")
+          : "";
+        const templateConfirmacao = zapCfg?.confirmacao_agendamento || MENSAGENS_PADRAO.confirmacao_agendamento;
+        const msgConfirmada = formatarMensagem(templateConfirmacao, {
+          cliente: session.clienteNome || pushName || "Cliente",
+          servico: session.servico?.titulo || "Procedimento",
+          data: dataFormatada,
+          horario: session.slot || "",
+          valor_total: session.servico?.preco ? formatarMoeda(session.servico.preco) : "",
+        });
+
         return (
-          `📸 *Comprovante do PIX recebido com sucesso!* ✨\n\n` +
-          `Olá, *${session.clienteNome || pushName || "Cliente"}*! Confirmamos o recebimento do sinal para *${session.servico?.titulo || "o procedimento"}*.\n\n` +
-          `✅ *Seu agendamento está 100% CONFIRMADO na agenda do Studio Malu Alves Beauty!* 🌸\n\n` +
-          `📍 *Local:* Studio Malu Alves Beauty\n` +
-          `Te enviaremos um lembrete antes do seu atendimento. Agradecemos a preferência e esperamos por você! ✨`
+          `📸 *Comprovante do PIX recebido e confirmado com sucesso!* ✨\n\n` +
+          msgConfirmada
         );
       }
     }
@@ -94,9 +108,11 @@ export class WhatsAppBotEngine {
     // =========================================================================
     // RESPOSTAS AUTOMÁTICAS CUSTOMIZADAS (Localização, Formas de Pagamento, etc.)
     // =========================================================================
-    const customResp = this.buscarRespostaCustomizada(textoLower, zapCfg?.respostas_personalizadas);
+    const customResp = encontrarRespostaCustomizada(textoLower, zapCfg?.respostas_personalizadas);
     if (customResp) {
-      return customResp.resposta;
+      return formatarMensagem(customResp.resposta, {
+        cliente: pushName || "Cliente",
+      });
     }
 
     // =========================================================================
@@ -121,10 +137,10 @@ export class WhatsAppBotEngine {
         );
       }
 
-      // Envia menu inicial padrão
+      // Envia menu inicial padrão carregado das configurações personalizadas
       session.step = "INICIAL";
       sessions.set(telLimpo, session);
-      return this.gerarTextoBoasVindas(config, zapCfg?.respostas_personalizadas);
+      return gerarTextoBoasVindas(config, pushName);
     }
 
     // =========================================================================
@@ -258,38 +274,33 @@ export class WhatsAppBotEngine {
         const titular = config.titular_pix || "Luisa Alves dos Santos";
         const tempoLimite = config.tempo_limite_sinal_minutos || 30;
 
-        return (
-          `✨ *PRÉ-RESERVA REALIZADA COM SUCESSO!* ✨\n\n` +
-          `👤 *Cliente:* ${nomeCliente}\n` +
-          `✨ *Procedimento:* ${srv.titulo}\n` +
-          `📅 *Data:* ${dataFormatada} às *${session.slot}*\n` +
-          `💵 *Valor Total:* ${formatarMoeda(precoFinal)}\n\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `🔒 *CONFIRMAÇÃO DO AGENDAMENTO (SINAL ANTECIPADO)*\n` +
-          `Para garantir com exclusividade a sua vaga na agenda da designer, solicitamos um adiantamento de segurança:\n\n` +
-          `💰 *Valor do Sinal:* *${formatarMoeda(valorSinal)}*\n` +
-          `_(O restante será pago no dia do seu atendimento)_\n\n` +
-          `🔑 *CHAVE PIX:*\n` +
-          `\`${chavePix}\`\n` +
-          `*Titular:* ${titular}\n\n` +
-          `⏳ *Tempo limite:* Seu horário fica reservado por *${tempoLimite} minutos*.\n` +
-          `Por favor, responda a esta mensagem enviando a *foto ou comprovante* do PIX para que o robô confirme seu horário automaticamente! ✨`
-        );
+        const templateSinal = zapCfg?.solicitacao_sinal || MENSAGENS_PADRAO.solicitacao_sinal;
+        return formatarMensagem(templateSinal, {
+          cliente: nomeCliente,
+          servico: srv.titulo,
+          data: dataFormatada,
+          horario: session.slot,
+          valor_total: formatarMoeda(precoFinal),
+          valor_sinal: formatarMoeda(valorSinal),
+          valor_restante: formatarMoeda(Math.max(0, precoFinal - valorSinal)),
+          chave_pix: chavePix,
+          tipo_chave: "Chave PIX",
+          titular_pix: titular,
+          tempo_limite: tempoLimite,
+        });
       }
 
       session.step = "FINALIZADO";
       sessions.set(telLimpo, session);
 
-      return (
-        `🎉 *AGENDAMENTO CONFIRMADO!* ✨\n\n` +
-        `Olá, *${nomeCliente}*! Seu horário foi reservado com sucesso no Studio Malu Alves Beauty.\n\n` +
-        `• *Procedimento:* ${srv.titulo}\n` +
-        `• *Data:* ${dataFormatada} às *${session.slot}*\n` +
-        `• *Valor:* ${formatarMoeda(precoFinal)}\n` +
-        `📍 *Local:* Studio Malu Alves Beauty\n\n` +
-        `✅ _Seu horário já está garantido na agenda da designer! Te mandaremos um lembrete antes do atendimento._\n\n` +
-        `Esperamos por você! 🌸`
-      );
+      const templateConfirmacao = zapCfg?.confirmacao_agendamento || MENSAGENS_PADRAO.confirmacao_agendamento;
+      return formatarMensagem(templateConfirmacao, {
+        cliente: nomeCliente,
+        servico: srv.titulo,
+        data: dataFormatada,
+        horario: session.slot,
+        valor_total: formatarMoeda(precoFinal),
+      });
     }
 
     return null;
@@ -298,54 +309,6 @@ export class WhatsAppBotEngine {
   // =========================================================================
   // AUXILIARES
   // =========================================================================
-
-  private static buscarRespostaCustomizada(textoLower: string, respostas?: RespostaAutomatica[]): RespostaAutomatica | null {
-    if (!respostas || !Array.isArray(respostas)) return null;
-
-    for (const r of respostas) {
-      if (!r.ativo) continue;
-
-      if (r.opcao_numero && textoLower === r.opcao_numero.trim().toLowerCase()) {
-        return r;
-      }
-
-      if (r.palavras_chave) {
-        const palavras = r.palavras_chave.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean);
-        if (palavras.some((p) => textoLower.includes(p))) {
-          return r;
-        }
-      }
-
-      if (r.titulo && textoLower.includes(r.titulo.toLowerCase())) {
-        return r;
-      }
-    }
-
-    return null;
-  }
-
-  private static gerarTextoBoasVindas(config: BarbeariaConfig, customizadas?: RespostaAutomatica[]): string {
-    const cumprimento = obterCumprimentoHorario();
-    const nomeStudio = config.nome_barbearia || "Studio Malu Alves Beauty";
-
-    let opcoesExtras = "";
-    if (customizadas && customizadas.length > 0) {
-      opcoesExtras = customizadas
-        .filter((c) => c.ativo)
-        .map((c, i) => `*${i + 4}* ➔ ${c.titulo}`)
-        .join("\n");
-      if (opcoesExtras) opcoesExtras = `\n${opcoesExtras}`;
-    }
-
-    return (
-      `✨ *${cumprimento}! Bem-vinda ao ${nomeStudio}!* ✨\n\n` +
-      `Eu sou a assistente virtual do Studio. Como posso te ajudar hoje?\n\n` +
-      `*1* ➔ Agendar um Horário\n` +
-      `*2* ➔ Ver Nossos Procedimentos e Valores\n` +
-      `*3* ➔ Falar com a Equipe${opcoesExtras}\n\n` +
-      `_Digite o número da opção desejada:_`
-    );
-  }
 
   private static gerarMenuServicos(servicos: Servico[]): string {
     return (

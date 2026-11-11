@@ -48,8 +48,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ignored: true });
     }
 
-    // Extrai o número do telefone
-    const phone = (key.participantPn || key.senderPn || remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "")).replace(/\D/g, "");
+    // Extrai o número do telefone com suporte robusto a LID e aliases
+    const rawTarget =
+      key.participantPn ||
+      key.senderPn ||
+      data.sender ||
+      key.remoteJidAlt ||
+      remoteJid;
+    const phone = String(rawTarget).replace(/@.*$/, "").replace(/\D/g, "");
 
     console.log(`[EvolutionWebhook] Mensagem de ${phone} (${pushName}): "${texto || "[Mídia]"}"`);
 

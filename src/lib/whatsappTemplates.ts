@@ -127,10 +127,22 @@ export function formatarMensagem(
 ): string {
   let resultado = template;
   const cumprimentoPadrao = obterCumprimentoHorario();
-  const varsCompletas = {
+  const varsCompletas: Record<string, string | number | undefined> = {
     cumprimento: cumprimentoPadrao,
     ...variaveis,
   };
+
+  // Aliases úteis para tolerar tags alternativas digitadas pelo usuário
+  if (varsCompletas.cliente && !varsCompletas.nome) varsCompletas.nome = varsCompletas.cliente;
+  if (varsCompletas.nome && !varsCompletas.cliente) varsCompletas.cliente = varsCompletas.nome;
+  if (varsCompletas.horario && !varsCompletas.hora) varsCompletas.hora = varsCompletas.horario;
+  if (varsCompletas.hora && !varsCompletas.horario) varsCompletas.horario = varsCompletas.hora;
+  if (varsCompletas.servico && !varsCompletas.procedimento) varsCompletas.procedimento = varsCompletas.servico;
+  if (varsCompletas.procedimento && !varsCompletas.servico) varsCompletas.servico = varsCompletas.procedimento;
+  if (varsCompletas.valor_total && !varsCompletas.valor) varsCompletas.valor = varsCompletas.valor_total;
+  if (varsCompletas.valor && !varsCompletas.valor_total) varsCompletas.valor_total = varsCompletas.valor;
+  if (varsCompletas.chave_pix && !varsCompletas.chave) varsCompletas.chave = varsCompletas.chave_pix;
+  if (varsCompletas.titular_pix && !varsCompletas.titular) varsCompletas.titular = varsCompletas.titular_pix;
 
   for (const [chave, valor] of Object.entries(varsCompletas)) {
     const safeVal = valor !== undefined && valor !== null ? String(valor) : "";
@@ -162,12 +174,24 @@ export function gerarTextoBoasVindas(
   const cumprimento = obterCumprimentoHorario();
   const saudacaoCliente = nomeCliente ? `${cumprimento}, *${nomeCliente}*!` : `${cumprimento}!`;
 
-  return formatarMensagem(template, {
+  let resultado = formatarMensagem(template, {
     cliente: nomeCliente || "Cliente",
     cumprimento,
     saudacao: saudacaoCliente,
     opcoes_personalizadas: blocoOpcoes,
-  }).replace(/\n{3,}/g, "\n\n");
+  });
+
+  // Se houver opções customizadas ativas mas o template personalizado do usuário não incluiu a tag {opcoes_personalizadas},
+  // insere as opções customizadas automaticamente antes da instrução de digitação
+  if (blocoOpcoes && !template.includes("{opcoes_personalizadas}")) {
+    if (resultado.includes("_Digite o número")) {
+      resultado = resultado.replace("_Digite o número", `${blocoOpcoes}\n\n_Digite o número`);
+    } else {
+      resultado = `${resultado}\n\n${blocoOpcoes}`;
+    }
+  }
+
+  return resultado.replace(/\n{3,}/g, "\n\n");
 }
 
 /**

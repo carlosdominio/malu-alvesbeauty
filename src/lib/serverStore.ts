@@ -17,6 +17,8 @@ import {
   expedienteInicial,
   servicosIniciais,
 } from "./mockData";
+import { EvolutionService } from "./evolutionService";
+import { formatarMensagem, MENSAGENS_PADRAO } from "./whatsappTemplates";
 
 interface DBData {
   config: BarbeariaConfig;
@@ -201,27 +203,24 @@ export const ServerStore = {
           ag.observacoes = (ag.observacoes ? ag.observacoes + " • " : "") + "Cancelado automaticamente (sinal PIX expirado)";
           alterado = true;
 
-          // Disparar cancelamento e notificação educada no WhatsApp com opções de recuperação
-          const whatsappUrl =
-            process.env.WHATSAPP_SERVER_URL ||
-            process.env.NEXT_PUBLIC_WHATSAPP_SERVER_URL ||
-            "https://malu-alvesbeauty.onrender.com";
-
-          fetch(`${whatsappUrl}/cancel-notify`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tipo: "SINAL_EXPIRADO",
-              telefone: ag.cliente_telefone,
-              nome: ag.cliente_nome,
-              dataHora: ag.horario_inicio,
-              servicoTitulo: ag.servico_titulo,
-              servicoId: ag.servico_id,
-              valor: ag.valor_cobrado,
-              valorSinal: ag.valor_sinal,
-              motivo: "Prazo para envio do sinal PIX expirado",
-            }),
-          }).catch((e) => console.error("Erro ao notificar cancelamento por sinal expirado:", e));
+          // Disparar cancelamento e notificação educada no WhatsApp via Evolution API
+          try {
+            const template = dados.config.mensagens_zap?.cancelamento_sinal_expirado || MENSAGENS_PADRAO.cancelamento_sinal_expirado;
+            const partes = (ag.horario_inicio || "").split("T");
+            const dataFormatada = partes[0] ? partes[0].split("-").reverse().slice(0, 2).join("/") : "";
+            const horaFormatada = partes[1] ? partes[1].slice(0, 5) : "";
+            const msg = formatarMensagem(template, {
+              cliente: ag.cliente_nome || "Cliente",
+              servico: ag.servico_titulo || "Procedimento",
+              data: dataFormatada,
+              horario: horaFormatada,
+            });
+            EvolutionService.sendMessage(ag.cliente_telefone, msg).catch((e) =>
+              console.error("Erro ao notificar cancelamento por sinal expirado via Evolution:", e)
+            );
+          } catch (e) {
+            console.error("Erro ao formatar cancelamento por sinal expirado:", e);
+          }
         }
       }
     });
