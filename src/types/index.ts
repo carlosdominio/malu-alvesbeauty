@@ -10,6 +10,8 @@ export interface RespostaAutomatica {
 }
 
 export interface MensagensWhatsAppConfig {
+  robo_ativo?: boolean;
+  lembrete_2h_ativo?: boolean;
   boas_vindas?: string;
   solicitacao_sinal?: string;
   confirmacao_agendamento?: string;

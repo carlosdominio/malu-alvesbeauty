@@ -685,6 +685,13 @@ async function processarMensagemRobo(remoteJid, textoUsuario, pushNameRaw, realP
     await atualizarConfigRemoto().catch(() => {});
   }
   const db = lerBancoCentral();
+
+  // Verifica se o Atendimento Automático está ativado nas Regras do Robô
+  if (db.config?.mensagens_zap?.robo_ativo === false) {
+    console.log(`ℹ️ [WhatsApp] Mensagem de ${remoteJid} ignorada: Atendimento Automático desativado nas Regras.`);
+    return null;
+  }
+
   const timeoutMin = db.config?.tempo_inatividade_bot_minutos || 15;
   const timeoutMs = timeoutMin * 60 * 1000;
 

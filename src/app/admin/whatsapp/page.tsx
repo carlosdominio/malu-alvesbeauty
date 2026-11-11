@@ -124,6 +124,8 @@ export default function WhatsAppPage() {
 
       // Inicializa os textos dos templates a partir do config ou padrão
       const zapCfg = cfg.mensagens_zap;
+      setBotAtivo(zapCfg?.robo_ativo ?? true);
+      setLembrete2hAtivo(zapCfg?.lembrete_2h_ativo ?? true);
       setMsgBoasVindas(zapCfg?.boas_vindas || MENSAGENS_PADRAO.boas_vindas);
       setMsgSolicitacaoSinal(zapCfg?.solicitacao_sinal || MENSAGENS_PADRAO.solicitacao_sinal);
       setMsgConfirmacao(zapCfg?.confirmacao_agendamento || MENSAGENS_PADRAO.confirmacao_agendamento);
@@ -261,6 +263,8 @@ export default function WhatsAppPage() {
         ...cfgAtual,
         mensagens_zap: {
           ...(cfgAtual.mensagens_zap || {}),
+          robo_ativo: botAtivo,
+          lembrete_2h_ativo: lembrete2hAtivo,
           boas_vindas: msgBoasVindas,
           solicitacao_sinal: msgSolicitacaoSinal,
           confirmacao_agendamento: msgConfirmacao,
@@ -284,6 +288,58 @@ export default function WhatsAppPage() {
       toastWarning("Erro ao Salvar", "Não foi possível salvar os modelos. Tente novamente.");
     } finally {
       setSalvandoMensagens(false);
+    }
+  };
+
+  // Alternar Atendimento Automático (salva persistente no banco)
+  const handleToggleBotAtivo = async (novoValor: boolean) => {
+    setBotAtivo(novoValor);
+    try {
+      const cfgAtual = await DataStore.getConfig();
+      const novoConfig: BarbeariaConfig = {
+        ...cfgAtual,
+        mensagens_zap: {
+          ...(cfgAtual.mensagens_zap || {}),
+          robo_ativo: novoValor,
+        },
+      };
+      await DataStore.updateConfig(novoConfig);
+      setConfig(novoConfig);
+      toastSuccess(
+        novoValor ? "Atendimento Ativado 🤖" : "Atendimento Pausado ⏸️",
+        novoValor
+          ? "O robô responderá aos clientes no WhatsApp automaticamente."
+          : "O robô não responderá automaticamente até ser reativado."
+      );
+    } catch (e) {
+      console.error("Erro ao salvar bot_ativo:", e);
+      toastWarning("Erro ao Salvar", "Não foi possível atualizar a regra.");
+    }
+  };
+
+  // Alternar Lembrete de 2h (salva persistente no banco)
+  const handleToggleLembrete2h = async (novoValor: boolean) => {
+    setLembrete2hAtivo(novoValor);
+    try {
+      const cfgAtual = await DataStore.getConfig();
+      const novoConfig: BarbeariaConfig = {
+        ...cfgAtual,
+        mensagens_zap: {
+          ...(cfgAtual.mensagens_zap || {}),
+          lembrete_2h_ativo: novoValor,
+        },
+      };
+      await DataStore.updateConfig(novoConfig);
+      setConfig(novoConfig);
+      toastSuccess(
+        novoValor ? "Lembrete 2h Ativado ⏰" : "Lembrete 2h Desativado 🔕",
+        novoValor
+          ? "Mensagens de lembrete 2h antes estão ativadas."
+          : "Lembretes de 2h antes desativados."
+      );
+    } catch (e) {
+      console.error("Erro ao salvar lembrete_2h_ativo:", e);
+      toastWarning("Erro ao Salvar", "Não foi possível atualizar a regra.");
     }
   };
 
@@ -890,7 +946,7 @@ export default function WhatsAppPage() {
                 <input
                   type="checkbox"
                   checked={botAtivo}
-                  onChange={(e) => setBotAtivo(e.target.checked)}
+                  onChange={(e) => handleToggleBotAtivo(e.target.checked)}
                   className="w-5 h-5 rounded-lg accent-amber-500 cursor-pointer"
                 />
               </div>
@@ -904,7 +960,7 @@ export default function WhatsAppPage() {
                 <input
                   type="checkbox"
                   checked={lembrete2hAtivo}
-                  onChange={(e) => setLembrete2hAtivo(e.target.checked)}
+                  onChange={(e) => handleToggleLembrete2h(e.target.checked)}
                   className="w-5 h-5 rounded-lg accent-amber-500 cursor-pointer"
                 />
               </div>
