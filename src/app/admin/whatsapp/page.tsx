@@ -21,6 +21,9 @@ import {
   Save,
   HelpCircle,
   FileText,
+  Settings,
+  Copy,
+  ShieldCheck,
 } from "lucide-react";
 import { Servico, ExpedienteDia, HorarioSlot, BarbeariaConfig, RespostaAutomatica } from "@/types";
 import { DataStore } from "@/lib/dataStore";
@@ -56,12 +59,22 @@ export default function WhatsAppPage() {
   // Sub-abas: Conexão/Simulador, Modelos de Mensagens, Novas Opções Customizadas
   const [subAba, setSubAba] = useState<"CONEXAO" | "MENSAGENS" | "OPCOES">("CONEXAO");
 
-  // Estados Reais da Conexão Baileys
+  // Estados Reais da Conexão Evolution API v2
   const [statusConexao, setStatusConexao] = useState<"DISCONNECTED" | "CONNECTING" | "CONNECTED">("DISCONNECTED");
   const [carregandoStatusInicial, setCarregandoStatusInicial] = useState(true);
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
   const [telefoneConectado, setTelefoneConectado] = useState<string | null>(null);
   const [carregandoAcao, setCarregandoAcao] = useState(false);
+
+  // Estados de Configuração da Evolution API
+  const [evolutionApiUrl, setEvolutionApiUrl] = useState("");
+  const [evolutionApiKey, setEvolutionApiKey] = useState("");
+  const [evolutionInstanceName, setEvolutionInstanceName] = useState("studio-malu");
+  const [evolutionConfigured, setEvolutionConfigured] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("https://malu-alvesbeauty.vercel.app/api/whatsapp/webhook");
+  const [modalEvolutionAberta, setModalEvolutionAberta] = useState(false);
+  const [salvandoEvolution, setSalvandoEvolution] = useState(false);
+  const [webhookCopiado, setWebhookCopiado] = useState(false);
 
   const [lembrete2hAtivo, setLembrete2hAtivo] = useState(true);
   const [botAtivo, setBotAtivo] = useState(true);
@@ -138,25 +151,23 @@ export default function WhatsAppPage() {
 
       // Inicializa as respostas customizadas
       setRespostasCustom(zapCfg?.respostas_personalizadas || RESPOSTAS_PADRAO_EXEMPLOS);
+
+      // Inicializa credenciais da Evolution API
+      setEvolutionApiUrl(cfg.evolution_api_url || "");
+      setEvolutionApiKey(cfg.evolution_api_key || "");
+      setEvolutionInstanceName(cfg.evolution_instance_name || "studio-malu");
+      setEvolutionConfigured(Boolean(cfg.evolution_api_url && cfg.evolution_api_key));
     }
     load();
   }, []);
 
-  // 2. Polling de status real do WhatsApp
-  const getBotEndpoint = () => {
-    return process.env.NEXT_PUBLIC_WHATSAPP_SERVER_URL || "https://malu-alvesbeauty.onrender.com";
-  };
-
+  // 2. Polling de status real do WhatsApp via Evolution API
   const checarStatusWhatsApp = useCallback(async () => {
     try {
-      // 1. Tenta a rota interna mesma-origem (0ms preflight, sem bloqueio de CORS)
-      let res = await fetch("/api/whatsapp", { cache: "no-store" }).catch(() => null);
-      if (!res || !res.ok) {
-        res = await fetch(`${getBotEndpoint()}/status`, { cache: "no-store" }).catch(() => null);
-      }
+      const res = await fetch("/api/whatsapp", { cache: "no-store" });
       if (res && res.ok) {
         const data = await res.json();
-        setStatusConexao(data.status);
+        setStatusConexao(data.status || "DISCONNECTED");
         if (data.qrCodeBase64) {
           setQrCodeBase64(data.qrCodeBase64);
         }
@@ -165,36 +176,58 @@ export default function WhatsAppPage() {
         } else {
           setTelefoneConectado(null);
         }
+        if (data.configured !== undefined) {
+          setEvolutionConfigured(data.configured);
+        }
+        if (data.apiUrl && !evolutionApiUrl) {
+          setEvolutionApiUrl(data.apiUrl);
+        }
+        if (data.instanceName && !evolutionInstanceName) {
+          setEvolutionInstanceName(data.instanceName);
+        }
+        if (data.webhookUrl) {
+          setWebhookUrl(data.webhookUrl);
+        }
       }
     } catch (e) {
       console.error("Erro ao verificar status do WhatsApp:", e);
     } finally {
       setCarregandoStatusInicial(false);
     }
-  }, []);
+  }, [evolutionApiUrl, evolutionInstanceName]);
 
   useEffect(() => {
     checarStatusWhatsApp();
-    const interval = setInterval(checarStatusWhatsApp, 2500);
+    const interval = setInterval(checarStatusWhatsApp, 3000);
     return () => clearInterval(interval);
   }, [checarStatusWhatsApp]);
 
   // Iniciar conexão real (gerar QR Code)
   const handleIniciarConexao = async () => {
+    if (!evolutionConfigured) {
+      setModalEvolutionAberta(true);
+      return;
+    }
     setCarregandoAcao(true);
     try {
-      const res = await fetch(`${getBotEndpoint()}/start`, { method: "POST" }).catch(() => null);
-      if (!res || !res.ok) {
-        await fetch("/api/whatsapp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "START" }),
-        });
+      const res = await fetch("/api/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "START" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastWarning("Atenção", data.error || "Não foi possível gerar o QR Code.");
+        return;
       }
-      await checarStatusWhatsApp();
-      toastInfo("Conexão Solicitada 📱", "Iniciando Baileys e gerando QR Code...");
+      if (data.qrCodeBase64) {
+        setQrCodeBase64(data.qrCodeBase64);
+        setStatusConexao("CONNECTING");
+      }
+      toastInfo("QR Code Solicitado 📱", "Carregando QR Code da Evolution API...");
     } catch (err) {
       console.error(err);
+      toastWarning("Erro", "Falha de conexão com a Evolution API.");
     } finally {
       setCarregandoAcao(false);
     }
@@ -204,20 +237,74 @@ export default function WhatsAppPage() {
   const handleDesconectar = async () => {
     setCarregandoAcao(true);
     try {
-      const res = await fetch(`${getBotEndpoint()}/disconnect`, { method: "POST" }).catch(() => null);
-      if (!res || !res.ok) {
-        await fetch("/api/whatsapp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "DISCONNECT" }),
-        });
-      }
-      await checarStatusWhatsApp();
-      toastInfo("WhatsApp Desconectado 🔌", "A conexão com o aparelho foi encerrada com sucesso.");
+      await fetch("/api/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "DISCONNECT" }),
+      });
+      setStatusConexao("DISCONNECTED");
+      setTelefoneConectado(null);
+      setQrCodeBase64(null);
+      toastInfo("WhatsApp Desconectado 🔌", "A conexão com a Evolution API foi encerrada.");
     } catch (err) {
       console.error(err);
     } finally {
       setCarregandoAcao(false);
+    }
+  };
+
+  // Salvar credenciais da Evolution API e sincronizar
+  const handleSalvarEvolution = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!evolutionApiUrl.trim() || !evolutionApiKey.trim()) {
+      toastWarning("Campos Obrigatórios ⚠️", "Preencha a URL da Evolution API e a Chave de API.");
+      return;
+    }
+
+    setSalvandoEvolution(true);
+    try {
+      const res = await fetch("/api/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "SAVE_EVOLUTION",
+          apiUrl: evolutionApiUrl.trim(),
+          apiKey: evolutionApiKey.trim(),
+          instanceName: evolutionInstanceName.trim() || "studio-malu",
+          webhookUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toastWarning("Falha na Conexão ❌", data.error || "Não foi possível conectar na Evolution API.");
+        return;
+      }
+
+      setEvolutionConfigured(true);
+      setStatusConexao(data.status || "DISCONNECTED");
+      if (data.qrCodeBase64) {
+        setQrCodeBase64(data.qrCodeBase64);
+      }
+      if (data.status === "CONNECTED") {
+        setTelefoneConectado(data.connectedPhone);
+      }
+      setModalEvolutionAberta(false);
+      toastSuccess("Evolution API Conectada! 🚀", "Instância inicializada e Webhook registrado com sucesso.");
+    } catch (err) {
+      console.error(err);
+      toastWarning("Erro", "Erro ao salvar credenciais da Evolution API.");
+    } finally {
+      setSalvandoEvolution(false);
+    }
+  };
+
+  const handleCopiarWebhook = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(webhookUrl);
+      setWebhookCopiado(true);
+      toastSuccess("URL Copiada! 📋", "URL do Webhook copiada para a área de transferência.");
+      setTimeout(() => setWebhookCopiado(false), 2500);
     }
   };
 
@@ -693,6 +780,16 @@ export default function WhatsAppPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setModalEvolutionAberta(true)}
+            className="flex items-center gap-1.5 text-xs font-bold border-zinc-700 hover:border-amber-500 text-zinc-300"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>Configurar API</span>
+          </Button>
+
           {statusConexao === "CONNECTED" ? (
             <Button
               variant="danger"
@@ -787,7 +884,7 @@ export default function WhatsAppPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* COLUNA ESQUERDA: STATUS DA CONEXÃO & QR CODE REAL (5 colunas) */}
           <div className="lg:col-span-5 space-y-4">
-            {/* Card de Status da Conexão */}
+            {/* Card de Conexão WhatsApp / Evolution API */}
             <Card className="border-zinc-800">
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2.5">
@@ -795,7 +892,10 @@ export default function WhatsAppPage() {
                     <Phone className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-zinc-100">Status do WhatsApp</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-zinc-100">WhatsApp do Studio</h4>
+                      <Badge variant="gold" className="text-[9px] px-1.5 py-0 font-bold">Evolution v2</Badge>
+                    </div>
                     <p className="text-xs text-zinc-400 font-mono">
                       {carregandoStatusInicial
                         ? "Verificando conexão..."
@@ -804,60 +904,177 @@ export default function WhatsAppPage() {
                         : statusConexao === "CONNECTING" && qrCodeBase64
                         ? "Aguardando leitura do QR Code"
                         : statusConexao === "CONNECTING" && !qrCodeBase64
-                        ? "Iniciando Baileys..."
+                        ? "Conectando à Evolution API..."
+                        : !evolutionConfigured
+                        ? "Configuração Necessária"
                         : "Desconectado"}
                     </p>
                   </div>
                 </div>
 
-                {carregandoStatusInicial && (
+                {carregandoStatusInicial ? (
                   <Badge variant="warning" className="flex items-center gap-1 bg-zinc-800 border-zinc-700 text-zinc-300">
                     <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
                     Sincronizando...
                   </Badge>
-                )}
-                {!carregandoStatusInicial && statusConexao === "CONNECTED" && (
+                ) : statusConexao === "CONNECTED" ? (
                   <Badge variant="success" className="flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     Conectado
                   </Badge>
-                )}
-                {!carregandoStatusInicial && statusConexao === "CONNECTING" && qrCodeBase64 && (
+                ) : statusConexao === "CONNECTING" && qrCodeBase64 ? (
                   <Badge variant="warning" className="flex items-center gap-1">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Aguardando Leitura
                   </Badge>
-                )}
-                {!carregandoStatusInicial && statusConexao === "CONNECTING" && !qrCodeBase64 && (
-                  <Badge variant="warning" className="flex items-center gap-1 bg-amber-500/10 border-amber-500/30 text-amber-300">
-                    <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-                    Iniciando...
+                ) : !evolutionConfigured ? (
+                  <Badge variant="warning" className="text-amber-400 border-amber-500/30 bg-amber-500/10">
+                    Não Configurada
                   </Badge>
-                )}
-                {!carregandoStatusInicial && statusConexao === "DISCONNECTED" && (
+                ) : (
                   <Badge variant="danger">Desconectado</Badge>
                 )}
               </div>
 
-              {/* Conteúdo do Card: Conexão Exclusiva via QR Code */}
+              {/* Conteúdo do Card */}
               <div className="pt-4 space-y-3">
                 {carregandoStatusInicial ? (
                   <div className="text-center p-8 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
                     <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
                       <Loader2 className="w-5 h-5 animate-spin" />
                     </div>
-                    <h5 className="text-sm font-bold text-zinc-200">Sincronizando com o WhatsApp...</h5>
+                    <h5 className="text-sm font-bold text-zinc-200">Sincronizando com a Evolution API...</h5>
                     <p className="text-xs text-zinc-400">Verificando status da conexão em tempo real...</p>
                   </div>
+                ) : !evolutionConfigured ? (
+                  <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-500/10 to-zinc-950 border border-amber-500/30 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <Zap className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h5 className="text-sm font-black text-amber-300">Conectar Evolution API (Gratuita)</h5>
+                        <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                          Open-Source e 100% gratuita. Preencha a URL e a Chave da sua Evolution API:
+                        </p>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleSalvarEvolution} className="space-y-3 pt-1">
+                      <div>
+                        <label className="text-xs font-bold text-zinc-300 block mb-1">URL da Evolution API</label>
+                        <input
+                          type="url"
+                          required
+                          placeholder="Ex: https://sua-evolution.onrender.com"
+                          value={evolutionApiUrl}
+                          onChange={(e) => setEvolutionApiUrl(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-750 text-xs text-zinc-100 placeholder:text-zinc-500 font-mono focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-zinc-300 block mb-1">Chave de API (apikey / token)</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ex: B6D711FCDE4D4FD5936544120E713976"
+                          value={evolutionApiKey}
+                          onChange={(e) => setEvolutionApiKey(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-750 text-xs text-zinc-100 placeholder:text-zinc-500 font-mono focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-zinc-300 block mb-1">Nome da Instância</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="studio-malu"
+                          value={evolutionInstanceName}
+                          onChange={(e) => setEvolutionInstanceName(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-750 text-xs text-zinc-100 placeholder:text-zinc-500 font-mono focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-zinc-300">Webhook do Studio (Vercel)</span>
+                          <button
+                            type="button"
+                            onClick={handleCopiarWebhook}
+                            className="text-[10px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1"
+                          >
+                            <Copy className="w-3 h-3" />
+                            <span>{webhookCopiado ? "Copiado!" : "Copiar"}</span>
+                          </button>
+                        </div>
+                        <p className="text-[11px] font-mono text-zinc-400 truncate">{webhookUrl}</p>
+                        <p className="text-[10px] text-zinc-500">Configurado automaticamente ao salvar!</p>
+                      </div>
+
+                      <Button
+                        type="submit"
+                        variant="gold"
+                        size="md"
+                        loading={salvandoEvolution}
+                        className="w-full font-bold text-xs shadow-lg shadow-amber-500/20"
+                      >
+                        <Zap className="w-3.5 h-3.5 mr-1" />
+                        Salvar e Conectar WhatsApp
+                      </Button>
+                    </form>
+                  </div>
                 ) : statusConexao === "CONNECTED" ? (
-                  <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 text-center space-y-2">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                  <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
-                    <h5 className="text-sm font-black text-emerald-400">WhatsApp Conectado com Sucesso!</h5>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
-                      Seu robô está online e respondendo às clientes automaticamente no número pareado. Sessão salva com persistência no banco de dados.
-                    </p>
+                    <div>
+                      <h5 className="text-sm font-black text-emerald-400">WhatsApp Conectado com Sucesso!</h5>
+                      <p className="text-xs text-zinc-400 leading-relaxed mt-1">
+                        Robô ativo na <strong>Evolution API v2</strong> respondendo automaticamente com persistência e estabilidade total.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 text-left text-xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-400">Instância:</span>
+                        <span className="font-mono font-bold text-zinc-200">{evolutionInstanceName}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-400">Servidor API:</span>
+                        <span className="font-mono text-zinc-400 truncate max-w-[200px]">{evolutionApiUrl}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800">
+                        <span className="text-zinc-400">Webhook Vercel:</span>
+                        <span className="text-emerald-400 font-bold flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Ativo
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setModalEvolutionAberta(true)}
+                        className="flex-1 text-xs font-semibold border-zinc-700 hover:border-amber-500 text-zinc-300"
+                      >
+                        <Settings className="w-3 h-3 mr-1" />
+                        Configurações API
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={handleDesconectar}
+                        loading={carregandoAcao}
+                        className="flex-1 text-xs font-semibold"
+                      >
+                        <Power className="w-3 h-3 mr-1" />
+                        Desconectar
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div>
@@ -880,15 +1097,26 @@ export default function WhatsAppPage() {
                             <p>3. Toque no botão verde <strong>Conectar um Aparelho</strong>.</p>
                             <p>4. Aponte a câmera para o QR Code acima.</p>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleIniciarConexao}
-                            loading={carregandoAcao}
-                            className="text-xs font-bold border-zinc-700 hover:border-amber-500 text-zinc-300 mt-2"
-                          >
-                            🔄 Gerar Novo QR Code
-                          </Button>
+                          <div className="flex items-center justify-center gap-2 mt-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleIniciarConexao}
+                              loading={carregandoAcao}
+                              className="text-xs font-bold border-zinc-700 hover:border-amber-500 text-zinc-300"
+                            >
+                              🔄 Atualizar QR Code
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setModalEvolutionAberta(true)}
+                              className="text-xs text-zinc-400 hover:text-white"
+                            >
+                              <Settings className="w-3.5 h-3.5 mr-1" />
+                              Configurações API
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : statusConexao === "CONNECTING" ? (
@@ -899,7 +1127,7 @@ export default function WhatsAppPage() {
                         <div>
                           <h5 className="text-sm font-bold text-zinc-200">Gerando QR Code...</h5>
                           <p className="text-xs text-zinc-400 mt-1">
-                            Conectando aos servidores do WhatsApp para obter novo QR Code...
+                            Conectando à Evolution API para obter novo QR Code...
                           </p>
                         </div>
                       </div>
@@ -911,7 +1139,7 @@ export default function WhatsAppPage() {
                         <div>
                           <h5 className="text-sm font-bold text-zinc-200">WhatsApp Desconectado</h5>
                           <p className="text-xs text-zinc-400 mt-1">
-                            Clique no botão abaixo para gerar o QR Code oficial e conectar seu aparelho.
+                            A Evolution API está pronta. Clique abaixo para gerar o QR Code oficial.
                           </p>
                         </div>
                         <Button
@@ -923,6 +1151,13 @@ export default function WhatsAppPage() {
                         >
                           Gerar QR Code Agora
                         </Button>
+                        <button
+                          type="button"
+                          onClick={() => setModalEvolutionAberta(true)}
+                          className="text-xs text-zinc-400 hover:text-amber-400 underline font-medium block mx-auto mt-2"
+                        >
+                          Alterar credenciais da Evolution API
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1588,6 +1823,113 @@ export default function WhatsAppPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL: CONFIGURAÇÃO DA EVOLUTION API */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={modalEvolutionAberta}
+        onClose={() => setModalEvolutionAberta(false)}
+        title="Configurações da Evolution API v2"
+        description="Conecte seu WhatsApp através da Evolution API gratuita e open-source."
+        icon={<Settings className="w-5 h-5 text-amber-400" />}
+        maxWidth="md"
+      >
+        <form onSubmit={handleSalvarEvolution} className="space-y-4">
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1">
+            <span className="font-bold text-amber-300 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4" /> 100% Gratuito & Open-Source
+            </span>
+            <p className="text-zinc-400 leading-relaxed">
+              A Evolution API roda independente no Render ou Docker. O Studio Malu Alves Beauty recebe as mensagens via Webhook do Vercel com máxima velocidade e sem quedas.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-zinc-300 block mb-1">URL da Evolution API</label>
+            <input
+              type="url"
+              required
+              value={evolutionApiUrl}
+              onChange={(e) => setEvolutionApiUrl(e.target.value)}
+              placeholder="Ex: https://sua-api.onrender.com"
+              className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500 font-mono"
+            />
+            <p className="text-[10px] text-zinc-500 mt-1">
+              Endereço onde a sua Evolution API está hospedada (ex: Render, Railway ou VPS).
+            </p>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-zinc-300 block mb-1">Chave de API (apikey / Token Global)</label>
+            <input
+              type="text"
+              required
+              value={evolutionApiKey}
+              onChange={(e) => setEvolutionApiKey(e.target.value)}
+              placeholder="Ex: B6D711FCDE4D4FD5936544120E713976"
+              className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500 font-mono"
+            />
+            <p className="text-[10px] text-zinc-500 mt-1">
+              A chave secreta configurada na variável AUTHENTICATION_API_KEY da sua Evolution API.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-zinc-300 block mb-1">Nome da Instância</label>
+            <input
+              type="text"
+              required
+              value={evolutionInstanceName}
+              onChange={(e) => setEvolutionInstanceName(e.target.value)}
+              placeholder="studio-malu"
+              className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500 font-mono"
+            />
+            <p className="text-[10px] text-zinc-500 mt-1">
+              Nome identificador único da sessão do WhatsApp (padrão: studio-malu).
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-zinc-300">URL do Webhook do Studio</span>
+              <button
+                type="button"
+                onClick={handleCopiarWebhook}
+                className="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>{webhookCopiado ? "Copiado!" : "Copiar URL"}</span>
+              </button>
+            </div>
+            <p className="text-xs font-mono text-zinc-400 truncate">{webhookUrl}</p>
+            <p className="text-[10px] text-zinc-500">
+              Configurado automaticamente na sua Evolution API ao salvar.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="md"
+              onClick={() => setModalEvolutionAberta(false)}
+              className="flex-1 text-zinc-400 hover:text-white"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              variant="gold"
+              size="md"
+              loading={salvandoEvolution}
+              className="flex-1 font-bold shadow-lg shadow-amber-500/20"
+            >
+              Salvar Configuração
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

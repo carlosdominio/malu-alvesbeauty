@@ -48,6 +48,12 @@ export interface BarbeariaConfig {
   auto_limpeza_incluir_historico?: boolean; // Se true, limpa também histórico de atendimentos/financeiro antigos
   admin_usuario?: string;
   admin_senha?: string;
+  evolution_api_url?: string;
+  evolution_api_key?: string;
+  evolution_instance_name?: string;
+  zapi_instance_id?: string;
+  zapi_token?: string;
+  zapi_client_token?: string;
   mensagens_zap?: MensagensWhatsAppConfig;
 }
 

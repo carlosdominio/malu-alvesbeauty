@@ -44,6 +44,9 @@ export function toSupabaseConfigPayload(config: Partial<BarbeariaConfig>): Recor
     porcentagem_desconto_fidelidade: config.porcentagem_desconto_fidelidade,
     auto_limpeza_cancelados_dias: config.auto_limpeza_cancelados_dias,
     auto_limpeza_incluir_historico: config.auto_limpeza_incluir_historico,
+    evolution_api_url: config.evolution_api_url,
+    evolution_api_key: config.evolution_api_key,
+    evolution_instance_name: config.evolution_instance_name,
     mensagens_zap: config.mensagens_zap,
   };
 
