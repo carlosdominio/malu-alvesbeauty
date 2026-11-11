@@ -181,7 +181,30 @@ export class EvolutionService {
   }
 
   /**
-   * Envia uma mensagem de texto via Evolution API
+   * Envia evento de presença (ex: "composing" para simular "digitando...")
+   * Proteção Anti-Ban: Simula comportamento humano real para a Meta
+   */
+  static async sendPresence(target: string, presence: "composing" | "available" | "unavailable" = "composing"): Promise<void> {
+    try {
+      const creds = await this.getConfig();
+      if (!creds) return;
+      const url = `${creds.apiUrl}/chat/sendPresence/${creds.instanceName}`;
+      await fetch(url, {
+        method: "POST",
+        headers: this.getHeaders(creds.apiKey),
+        body: JSON.stringify({
+          number: target,
+          presence,
+          delay: 1000,
+        }),
+      });
+    } catch {
+      // Falha silenciosa de presença para nunca travar o fluxo
+    }
+  }
+
+  /**
+   * Envia uma mensagem de texto via Evolution API com proteções Anti-Banimento ativas
    */
   static async sendMessage(target: string, text: string): Promise<boolean> {
     const creds = await this.getConfig();
@@ -205,6 +228,12 @@ export class EvolutionService {
       }
     }
 
+    // Proteção Anti-Ban 1: Dispara sinal de "digitando..." para simular atendimento humano
+    this.sendPresence(telFinal, "composing").catch(() => {});
+
+    // Proteção Anti-Ban 2: Delay humano dinâmico e aleatório (1.2s a 2.8s proporcional ao tamanho)
+    const delayHumano = Math.min(2800, Math.max(1200, Math.floor(text.length * 10) + Math.floor(Math.random() * 500)));
+
     try {
       const url = `${creds.apiUrl}/message/sendText/${creds.instanceName}`;
       const res = await fetch(url, {
@@ -213,7 +242,8 @@ export class EvolutionService {
         body: JSON.stringify({
           number: telFinal,
           text,
-          delay: 1200,
+          delay: delayHumano,
+          linkPreview: false,
         }),
       });
 
