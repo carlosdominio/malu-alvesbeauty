@@ -8,7 +8,7 @@ export function obterCumprimentoHorario(data: Date = new Date()): string {
   return "Boa noite";
 }
 
-export const MENSAGENS_PADRAO: Required<Omit<MensagensWhatsAppConfig, "respostas_personalizadas">> = {
+export const MENSAGENS_PADRAO: Required<Omit<MensagensWhatsAppConfig, "respostas_personalizadas" | "robo_ativo" | "lembrete_2h_ativo">> = {
   boas_vindas:
     `✨ *{cumprimento}! Bem-vinda ao Studio Malu Alves Beauty!* ✨\n\n` +
     `Eu sou a assistente virtual. Como posso te ajudar hoje?\n\n` +
