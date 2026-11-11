@@ -48,23 +48,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ ignored: true });
     }
 
-    // Extrai o número do telefone com suporte robusto a LID e aliases
-    const rawTarget =
-      key.participantPn ||
-      key.senderPn ||
-      data.sender ||
-      key.remoteJidAlt ||
-      remoteJid;
-    const phone = String(rawTarget).replace(/@.*$/, "").replace(/\D/g, "");
+    // Identifica se o remetente é um Linked Device (@lid) ou número comum
+    const isLid = remoteJid.includes("@lid");
+    const realPhoneCandidate = String(key.participantPn || key.senderPn || data.sender || key.remoteJidAlt || "").replace(/@.*$/, "").replace(/\D/g, "");
 
-    console.log(`[EvolutionWebhook] Mensagem de ${phone} (${pushName}): "${texto || "[Mídia]"}"`);
+    // Para responder: se for @lid e não tivermos o telefone real garantido, responde diretamente no remoteJid (@lid)
+    const replyTarget = (!isLid || realPhoneCandidate.length >= 10) && realPhoneCandidate
+      ? realPhoneCandidate
+      : remoteJid;
+
+    // Para o motor de agendamento (sessão interna)
+    const phone = realPhoneCandidate && realPhoneCandidate.length >= 10
+      ? realPhoneCandidate
+      : remoteJid.replace(/@.*$/, "").replace(/\D/g, "");
+
+    console.log(`[EvolutionWebhook] Mensagem de ${phone} (${pushName}) [destino: ${replyTarget}]: "${texto || "[Mídia]"}"`);
 
     // Processa a mensagem no motor do Studio
     const resposta = await WhatsAppBotEngine.processMessage(phone, texto, pushName, ehMidia);
 
     if (resposta) {
-      console.log(`[EvolutionWebhook] Respondendo para ${phone}...`);
-      await EvolutionService.sendMessage(phone, resposta);
+      console.log(`[EvolutionWebhook] Respondendo para ${replyTarget}...`);
+      await EvolutionService.sendMessage(replyTarget, resposta);
     }
 
     return NextResponse.json({ success: true });

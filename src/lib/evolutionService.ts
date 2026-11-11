@@ -183,15 +183,27 @@ export class EvolutionService {
   /**
    * Envia uma mensagem de texto via Evolution API
    */
-  static async sendMessage(phone: string, text: string): Promise<boolean> {
+  static async sendMessage(target: string, text: string): Promise<boolean> {
     const creds = await this.getConfig();
     if (!creds) {
       console.warn("[EvolutionAPI] Não foi possível enviar mensagem: credenciais ausentes.");
       return false;
     }
 
-    const telLimpo = phone.replace(/\D/g, "");
-    const telFinal = telLimpo.startsWith("55") ? telLimpo : `55${telLimpo}`;
+    let telFinal = target.trim();
+
+    // Se já contiver o JID completo (@lid ou @s.whatsapp.net), preserva intacto
+    if (telFinal.includes("@")) {
+      // target já é um JID válido
+    } else {
+      const telLimpo = telFinal.replace(/\D/g, "");
+      // Se for um identificador LID do WhatsApp (15 ou mais dígitos), envia com @lid
+      if (telLimpo.length >= 15) {
+        telFinal = `${telLimpo}@lid`;
+      } else {
+        telFinal = telLimpo.startsWith("55") ? telLimpo : `55${telLimpo}`;
+      }
+    }
 
     try {
       const url = `${creds.apiUrl}/message/sendText/${creds.instanceName}`;
