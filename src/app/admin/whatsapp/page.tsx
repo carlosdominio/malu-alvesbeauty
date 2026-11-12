@@ -379,11 +379,20 @@ export default function WhatsAppPage() {
     }
   };
 
-  // Alternar Atendimento Automático (salva persistente no banco)
+  // Alternar Atendimento Automático (salva persistente no banco com resposta imediata)
   const handleToggleBotAtivo = async (novoValor: boolean) => {
+    // 1. Resposta visual instantânea (0ms de latência)
     setBotAtivo(novoValor);
+    toastSuccess(
+      novoValor ? "Atendimento Ativado 🤖" : "Atendimento Pausado ⏸️",
+      novoValor
+        ? "O robô responderá aos clientes no WhatsApp automaticamente."
+        : "O robô não responderá automaticamente até ser reativado."
+    );
+
+    // 2. Persistência em segundo plano
     try {
-      const cfgAtual = await DataStore.getConfig();
+      const cfgAtual = config || (await DataStore.getConfig());
       const novoConfig: BarbeariaConfig = {
         ...cfgAtual,
         mensagens_zap: {
@@ -391,25 +400,29 @@ export default function WhatsAppPage() {
           robo_ativo: novoValor,
         },
       };
-      await DataStore.updateConfig(novoConfig);
       setConfig(novoConfig);
-      toastSuccess(
-        novoValor ? "Atendimento Ativado 🤖" : "Atendimento Pausado ⏸️",
-        novoValor
-          ? "O robô responderá aos clientes no WhatsApp automaticamente."
-          : "O robô não responderá automaticamente até ser reativado."
-      );
+      await DataStore.updateConfig(novoConfig);
     } catch (e) {
       console.error("Erro ao salvar bot_ativo:", e);
-      toastWarning("Erro ao Salvar", "Não foi possível atualizar a regra.");
+      setBotAtivo(!novoValor);
+      toastWarning("Erro ao Salvar", "Não foi possível sincronizar a regra com o banco.");
     }
   };
 
-  // Alternar Lembrete de 2h (salva persistente no banco)
+  // Alternar Lembrete de 2h (salva persistente no banco com resposta imediata)
   const handleToggleLembrete2h = async (novoValor: boolean) => {
+    // 1. Resposta visual instantânea (0ms de latência)
     setLembrete2hAtivo(novoValor);
+    toastSuccess(
+      novoValor ? "Lembrete 2h Ativado ⏰" : "Lembrete 2h Desativado 🔕",
+      novoValor
+        ? "Mensagens de lembrete 2h antes estão ativadas."
+        : "Lembretes de 2h antes desativados."
+    );
+
+    // 2. Persistência em segundo plano
     try {
-      const cfgAtual = await DataStore.getConfig();
+      const cfgAtual = config || (await DataStore.getConfig());
       const novoConfig: BarbeariaConfig = {
         ...cfgAtual,
         mensagens_zap: {
@@ -417,17 +430,12 @@ export default function WhatsAppPage() {
           lembrete_2h_ativo: novoValor,
         },
       };
-      await DataStore.updateConfig(novoConfig);
       setConfig(novoConfig);
-      toastSuccess(
-        novoValor ? "Lembrete 2h Ativado ⏰" : "Lembrete 2h Desativado 🔕",
-        novoValor
-          ? "Mensagens de lembrete 2h antes estão ativadas."
-          : "Lembretes de 2h antes desativados."
-      );
+      await DataStore.updateConfig(novoConfig);
     } catch (e) {
       console.error("Erro ao salvar lembrete_2h_ativo:", e);
-      toastWarning("Erro ao Salvar", "Não foi possível atualizar a regra.");
+      setLembrete2hAtivo(!novoValor);
+      toastWarning("Erro ao Salvar", "Não foi possível sincronizar a regra com o banco.");
     }
   };
 

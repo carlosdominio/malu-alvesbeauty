@@ -117,11 +117,11 @@ export const DataStore = {
   },
 
   async updateConfig(config: Partial<BarbeariaConfig>): Promise<BarbeariaConfig> {
-    const atual = await this.getConfig();
+    const atual = getLocal<BarbeariaConfig>(KEYS.CONFIG, configInicial);
     const atualizado = { ...atual, ...config };
     setLocal(KEYS.CONFIG, atualizado);
 
-    // Salvar no servidor (data_storage.json) e sincronizar
+    // Salvar no servidor (a rota /api/config já cuida do upsert no Supabase)
     try {
       await fetch("/api/config", {
         method: "POST",
@@ -130,16 +130,6 @@ export const DataStore = {
       });
     } catch (e) {
       console.error("Erro ao sincronizar config via API:", e);
-    }
-
-    // Salvar no Supabase com payload seguro
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const payloadSupabase = toSupabaseConfigPayload(atualizado);
-        await supabase.from("barbearia_config").upsert(payloadSupabase);
-      } catch (err) {
-        console.error("Erro ao atualizar config direto no Supabase:", err);
-      }
     }
     return atualizado;
   },
