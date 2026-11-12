@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  # 1. Evolution API (Gateway WhatsApp Oficial)
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: barber-evolution-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_TYPE=http
+      - CACHE_REDIS_ENABLED=false
+      - CACHE_LOCAL_ENABLED=true
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_v2
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+    env_file:
+      - .env.local
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  # 2. Servidor de Bot Nativo Barber OS (Baileys)
+  whatsapp-bot:
+    image: node:20-alpine
+    container_name: barber-whatsapp-bot
+    working_dir: /app
+    restart: always
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env.local
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    command: sh -c "npm install --production && node whatsapp-server.js"
+
+volumes:
+  evolution_instances:
