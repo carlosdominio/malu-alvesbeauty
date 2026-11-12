@@ -1,7 +1,9 @@
 import crypto from "crypto";
 
 const JWT_SECRET =
-  process.env.JWT_SECRET || "malu_beauty_studio_secret_key_2026_jwt_token";
+  process.env.JWT_SECRET ||
+  process.env.SUPABASE_JWT_SECRET ||
+  "malu_beauty_studio_secret_key_2026_jwt_token";
 
 export interface TokenPayload {
   sub: string;

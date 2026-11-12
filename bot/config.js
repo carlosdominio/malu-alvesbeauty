@@ -24,7 +24,10 @@ for (const envFile of envPaths) {
   }
 }
 
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.DATABASE_CONNECTION_URI;
 if (!DATABASE_URL) {
   console.error(">>> [AVISO DE SEGURANÇA] DATABASE_URL não definida no .env.local!");
 }
