@@ -19,7 +19,6 @@ import {
 import {
   isSupabaseConfigured,
   supabase,
-  toSupabaseConfigPayload,
   fromSupabaseConfigPayload,
 } from "./supabase";
 
