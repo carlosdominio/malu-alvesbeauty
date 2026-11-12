@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { DataStore } from "@/lib/dataStore";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { signAdminToken } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Informe usuário e senha." }, { status: 400 });
     }
 
-    let configUsuario = "admin";
-    let configSenha = "Malu@2026";
+    let configUsuario = process.env.ADMIN_USER || "admin";
+    let configSenha = process.env.ADMIN_PASSWORD || "Malu@2026";
 
     if (isSupabaseConfigured && supabase) {
       const { data } = await supabase.from("barbearia_config").select("admin_usuario, admin_senha").limit(1).single();
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     }
 
     if (usuario.trim() === configUsuario && senha === configSenha) {
-      const token = Buffer.from(`${usuario}:${Date.now()}:studio_malu_auth`).toString("base64");
+      const token = signAdminToken(usuario.trim());
       
       const response = NextResponse.json({ success: true, token });
       response.cookies.set("malu_admin_auth", token, {

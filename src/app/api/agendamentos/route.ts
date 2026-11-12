@@ -16,16 +16,14 @@ export async function GET(req: Request) {
       }
       const { data, error } = await query;
       if (!error && data) {
-        if (data.length > 0 || dataFiltro) {
-          const mapeados = data.map((ag: Record<string, unknown>) => {
-            const obs = typeof ag.observacoes === "string" ? ag.observacoes : "";
-            if (ag.status === "CONFIRMADO" && obs.includes("[AGUARDANDO_SINAL]")) {
-              return { ...ag, status: "AGUARDANDO_SINAL" };
-            }
-            return ag;
-          });
-          return NextResponse.json(mapeados);
-        }
+        const mapeados = data.map((ag: Record<string, unknown>) => {
+          const obs = typeof ag.observacoes === "string" ? ag.observacoes : "";
+          if (ag.status === "CONFIRMADO" && obs.includes("[AGUARDANDO_SINAL]")) {
+            return { ...ag, status: "AGUARDANDO_SINAL" };
+          }
+          return ag;
+        });
+        return NextResponse.json(mapeados);
       }
     }
 

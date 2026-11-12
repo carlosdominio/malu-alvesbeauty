@@ -30,9 +30,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (!token && !cookieToken) {
       setAutenticado(false);
       router.replace("/admin/login");
-    } else {
-      setAutenticado(true);
+      return;
     }
+
+    // Validação criptográfica do token assinado com o servidor
+    fetch(`/api/auth/verify?token=${encodeURIComponent(token || "")}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Não autorizado");
+        return res.json();
+      })
+      .then((data) => {
+        if (data.authenticated) {
+          setAutenticado(true);
+        } else {
+          throw new Error("Token inválido");
+        }
+      })
+      .catch(() => {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("malu_admin_auth");
+          document.cookie = "malu_admin_auth=; path=/; max-age=0";
+        }
+        setAutenticado(false);
+        router.replace("/admin/login");
+      });
   }, [pathname, ehPaginaLogin, router]);
 
   useEffect(() => {

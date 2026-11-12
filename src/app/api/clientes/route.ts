@@ -8,7 +8,7 @@ export async function GET() {
   try {
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase.from("clientes").select("*").order("total_visitas", { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return NextResponse.json(data);
       }
     }
